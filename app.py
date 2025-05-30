@@ -105,6 +105,25 @@ HTML_TEMPLATE = """
             height: 3rem;
             color: #4CAF50;
         }
+        .checkbox-container {
+            display: flex;
+            align-items: center;
+            margin-bottom: 15px;
+        }
+        .neon-checkbox {
+            margin-right: 8px;
+            accent-color: #4CAF50;
+            width: 18px;
+            height: 18px;
+            cursor: pointer;
+        }
+        .checkbox-label {
+            color: rgba(255, 255, 255, 0.9);
+            text-shadow: 0 0 5px rgba(120, 200, 255, 0.5);
+            font-size: 0.95rem;
+            user-select: none;
+            cursor: pointer;
+        }
     </style>
 </head>
 <body>
@@ -113,6 +132,10 @@ HTML_TEMPLATE = """
             <h1 class="mb-4">HiDream Image Generator</h1>
             <div class="mb-4">
                 <input type="text" class="form-control w-100" id="prompt" placeholder="Enter your image prompt...">
+            </div>
+            <div class="checkbox-container">
+                <input type="checkbox" id="tattoo-checkbox" class="neon-checkbox" checked>
+                <label for="tattoo-checkbox" class="checkbox-label">Tattoo (add "tattoo" to prompt)</label>
             </div>
             <button onclick="generateImage()" class="btn btn-primary px-4" id="generate-btn">Generate Image</button>
             <div class="loading" id="loading">
@@ -127,10 +150,18 @@ HTML_TEMPLATE = """
     </div>
     <script>
         async function generateImage() {
-            const prompt = document.getElementById('prompt').value.trim();
-            if (!prompt) {
+            const promptInput = document.getElementById('prompt').value.trim();
+            if (!promptInput) {
                 showError('Please enter a prompt');
                 return;
+            }
+            
+            // Check if tattoo checkbox is selected and append "tattoo" if needed
+            const tattooCheckbox = document.getElementById('tattoo-checkbox');
+            let prompt = promptInput;
+            
+            if (tattooCheckbox.checked) {
+                prompt += " tattoo";
             }
 
             const loadingDiv = document.getElementById('loading');
