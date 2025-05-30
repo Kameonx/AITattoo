@@ -462,7 +462,12 @@ def generate_image():
         try:
             response = requests.post(VENICE_UPSCALE_URL, json=payload, headers=headers, timeout=60)
             print("Venice API status:", response.status_code)
-            print("Venice API response:", response.text[:200] + "..." if len(response.text) > 200 else response.text)
+            # Avoid accessing response.text for binary responses on Render.com
+            content_type = response.headers.get("Content-Type", "")
+            if "application/json" in content_type:
+                print("Venice API response (JSON):", response.text[:200] + "..." if len(response.text) > 200 else response.text)
+            else:
+                print("Venice API response (non-JSON, likely image): <binary content>")
             response.raise_for_status()
             try:
                 data = response.json()
