@@ -206,15 +206,47 @@ HTML_TEMPLATE = """
             letter-spacing: 0.01em;
             padding: 0 2px;
         }
+        .input-container {
+            position: relative;
+            margin-bottom: 1rem;
+            width: 100%;
+        }
+        .upload-icon {
+            position: absolute;
+            right: 12px;
+            top: 50%;
+            transform: translateY(-50%);
+            color: rgba(120, 200, 255, 0.7);
+            cursor: pointer;
+            font-size: 1.5rem;
+            transition: color 0.2s;
+        }
+        .upload-icon:hover {
+            color: rgba(120, 200, 255, 1);
+        }
+        #file-input {
+            display: none;
+        }
+        .image-preview {
+            max-width: 200px;
+            max-height: 200px;
+            margin-bottom: 15px;
+            border-radius: 8px;
+            display: none;
+        }
     </style>
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
 </head>
 <body>
     <div class="container text-center">
         <div class="neon-container">
             <h1 class="mb-4">AI Tattoo Generator</h1>
-            <div class="mb-4">
+            <div class="mb-4 input-container">
                 <input type="text" class="form-control w-100" id="prompt" placeholder="Enter your image prompt...">
+                <label for="file-input" class="upload-icon"><i class="fas fa-upload"></i></label>
+                <input type="file" id="file-input" accept="image/*">
             </div>
+            <img src="" alt="Preview" id="image-preview" class="image-preview">
             <div class="checkbox-bar-container">
                 <div class="checkbox-bar">
                     <span class="checkbox-pair">
@@ -222,7 +254,7 @@ HTML_TEMPLATE = """
                         <label for="tattoo-checkbox" class="checkbox-label">Tattoo</label>
                     </span>
                     <span class="checkbox-pair">
-                        <input type="checkbox" id="symmetrical-checkbox" class="neon-checkbox" checked>
+                        <input type="checkbox" id="symmetrical-checkbox" class="neon-checkbox">
                         <label for="symmetrical-checkbox" class="checkbox-label">Symmetrical</label>
                     </span>
                     <span class="checkbox-pair">
@@ -256,12 +288,32 @@ HTML_TEMPLATE = """
         </div>
     </div>
     <script>
+        let uploadedImage = null;
+
+        document.getElementById('file-input').addEventListener('change', function(event) {
+            const file = event.target.files[0];
+            if (!file) return;
+
+            const reader = new FileReader();
+            reader.onload = function(e) {
+                const imgPreview = document.getElementById('image-preview');
+                imgPreview.src = e.target.result;
+                imgPreview.style.display = 'block';
+                uploadedImage = e.target.result;
+                
+                // Focus the prompt input for easy submission
+                document.getElementById('prompt').focus();
+            };
+            reader.readAsDataURL(file);
+        });
+
         function generateImage() {
             const promptInput = document.getElementById('prompt').value.trim();
-            if (!promptInput) {
-                showError('Please enter a prompt');
+            if (!promptInput && !uploadedImage) {
+                showError('Please enter a prompt or upload an image');
                 return;
             }
+            
             // Collect all checked styles
             const styleMap = [
                 { id: 'tattoo-checkbox', label: 'tattoo' },
@@ -271,14 +323,15 @@ HTML_TEMPLATE = """
                 { id: 'watercolor-checkbox', label: 'watercolor' },
                 { id: 'geometric-checkbox', label: 'geometric' }
             ];
+            
             let prompt = promptInput;
             styleMap.forEach(style => {
                 const cb = document.getElementById(style.id);
-                // skip tattoo, will be handled below
                 if (cb && cb.checked && style.label !== "tattoo") {
                     prompt += " " + style.label;
                 }
             });
+            
             // Always add "tattoo" if tattoo-checkbox is checked
             if (document.getElementById('tattoo-checkbox').checked) {
                 prompt += " tattoo";
@@ -311,7 +364,11 @@ HTML_TEMPLATE = """
                 fetch('/generate', {
                     method: 'POST',
                     headers: { 'Content-Type': 'application/json' },
-                    body: JSON.stringify({ prompt, seed })
+                    body: JSON.stringify({ 
+                        prompt, 
+                        seed,
+                        image: uploadedImage
+                    })
                 })
                 .then(res => res.json())
                 .then((data) => {
@@ -369,9 +426,96 @@ def generate_image():
     if request.json:
         prompt = request.json.get('prompt', '').strip()
         seed = request.json.get('seed')
+        input_image = request.json.get('image')
     else:
         prompt = ''
         seed = None
+        input_image = None
+
+    # If an image is uploaded, use the Venice /image/upscale endpoint with enhancement
+    if input_image:
+        VENICE_UPSCALE_URL = "https://api.venice.ai/api/v1/image/upscale"
+        # Only send the base64 part, not the data URL header
+        if isinstance(input_image, str) and input_image.startswith('data:'):
+            image_data = input_image.split(',', 1)[1]
+        else:
+            image_data = input_image
+
+        # Compose the enhancePrompt from the prompt and checked styles
+        enhance_prompt = prompt.strip() if prompt else ""
+        # Optionally, you can always append "tattoo" if tattoo-checkbox is checked on the frontend
+        # (the frontend already does this, so just use the prompt as received)
+
+        payload = {
+            "image": image_data,
+            "enhance": True,
+            "enhancePrompt": enhance_prompt if enhance_prompt else "tattoo",
+            "scale": 1,
+            "replication": 0.35,
+            "enhanceCreativity": 0.5
+        }
+        headers = {
+            "Authorization": f"Bearer {VENICE_API_KEY}",
+            "Content-Type": "application/json"
+        }
+        response = None
+        try:
+            response = requests.post(VENICE_UPSCALE_URL, json=payload, headers=headers, timeout=60)
+            print("Venice API status:", response.status_code)
+            print("Venice API response:", response.text[:200] + "..." if len(response.text) > 200 else response.text)
+            response.raise_for_status()
+            try:
+                data = response.json()
+                print("Response top-level keys:", list(data.keys()) if isinstance(data, dict) else "Not a dictionary")
+            except Exception:
+                print("Non-JSON response, treating as binary image.")
+                image_bytes = response.content
+                if image_bytes[:8] == b'\x89PNG\r\n\x1a\n':
+                    mime = "image/png"
+                elif image_bytes[:2] == b'\xff\xd8':
+                    mime = "image/jpeg"
+                else:
+                    mime = "application/octet-stream"
+                b64 = base64.b64encode(image_bytes).decode()
+                return jsonify({"image_urls": [f"data:{mime};base64,{b64}"]})
+        except requests.exceptions.HTTPError as e:
+            error_data = None
+            if response is not None:
+                try:
+                    error_data = response.json()
+                except Exception:
+                    error_data = response.text
+            return jsonify({
+                "error": f"API request failed: {str(e)}",
+                "api_response": error_data
+            }), response.status_code if response is not None else 500
+        except Exception as e:
+            return jsonify({"error": f"API request failed: {str(e)}"}), 500
+
+        # Extract image from response (if JSON)
+        image_urls = []
+        if isinstance(data, dict):
+            if "images" in data and isinstance(data["images"], list) and data["images"]:
+                for base64_img in data["images"]:
+                    if isinstance(base64_img, str):
+                        if base64_img.startswith("data:"):
+                            base64_content = base64_img.split(",", 1)[1]
+                        else:
+                            base64_content = base64_img
+                        image_urls.append(f"data:image/png;base64,{base64_content}")
+            elif "image" in data and isinstance(data["image"], str):
+                image_urls = [data["image"]]
+            elif "url" in data and isinstance(data["url"], str):
+                image_urls = [data["url"]]
+        print("Extracted image URLs:", image_urls)
+        if not image_urls or not any(url.startswith("http") or url.startswith("data:image") for url in image_urls):
+            return jsonify({
+                "error": "Image URL not found",
+                "api_response": data
+            }), 500
+        return jsonify({"image_urls": image_urls})
+
+    # If no image, use the normal text-to-image endpoint
     if not prompt:
         return jsonify({"error": "Empty prompt"}), 400
 
@@ -398,7 +542,7 @@ def generate_image():
         response = requests.post(VENICE_API_URL, json=payload, headers=headers, timeout=60)
         print("Venice API status:", response.status_code)
         print("Venice API response:", response.text[:500] + "..." if len(response.text) > 500 else response.text)
-        response.raise_for_status()
+        response.raise_for_status();
         data = response.json()
         print("Response top-level keys:", list(data.keys()) if isinstance(data, dict) else "Not a dictionary")
     except requests.exceptions.HTTPError as e:
@@ -426,10 +570,9 @@ def generate_image():
                     else:
                         base64_content = base64_img
                     image_urls.append(f"data:image/png;base64,{base64_content}")
-    # If we still can't find an image, try the old extraction methods
     if not image_urls:
         print("Primary extraction failed, trying fallback methods...")
-        image_url = None
+        image_url = None;
         if "url" in data:
             image_url = data["url"]
         elif "image" in data:
@@ -495,9 +638,9 @@ def generate_image():
                 subprocess.run(['djxl', jxl_path, png_path], check=True)
                 with open(png_path, 'rb') as png_file:
                     png_data = base64.b64encode(png_file.read()).decode();
-                    image_urls[idx] = f"data:image/png;base64,{png_data}";
-                os.remove(jxl_path);
-                os.remove(png_path);
+                    image_urls[idx] = f"data:image/png;base64,{png_data}"
+                os.remove(jxl_path)
+                os.remove(png_path)
             except Exception as e:
                 print(f"JXL conversion failed: {e}")
                 return jsonify({"error": "Failed to process image format"}), 500
