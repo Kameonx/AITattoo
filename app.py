@@ -5,11 +5,13 @@ import base64
 import subprocess
 import tempfile
 import random
+import threading
+import time
 
 app = Flask(__name__)
 
-VENICE_API_KEY = "06c-HIVdt8QNWkbgOh9d5RNgtWHPGweBJ8sbuM7s6e"  # Replace with your actual key
-VENICE_API_URL = "https://api.venice.ai/api/v1/image/generate"  # Correct endpoint
+VENICE_API_KEY = "06c-HIVdt8QNWkbgOh9d5RNgtWHPGweBJ8sbuM7s6e" 
+VENICE_API_URL = "https://api.venice.ai/api/v1/image/generate" 
 
 # CORS Headers Setup
 @app.after_request
@@ -204,6 +206,55 @@ HTML_TEMPLATE = """
             letter-spacing: 0.01em;
             padding: 0 2px;
         }
+        .rate-limit-info {
+            margin: 10px 0;
+            color: #aaffcc;
+            font-size: 1.05rem;
+            text-shadow: 0 0 4px #1f3;
+        }
+        .rate-limit-container {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            margin: 18px 0;
+            flex-wrap: wrap;
+            gap: 10px;
+        }
+        .reset-section {
+            display: flex;
+            align-items: center;
+            gap: 8px;
+            justify-content: flex-end;
+        }
+        .reset-section input[type="text"] {
+            width: 120px;
+            padding: 4px 8px;
+            font-size: 0.98rem;
+            border-radius: 6px;
+            border: 1px solid #2a3040;
+            background: rgba(15, 15, 22, 0.7);
+            color: #666;
+        }
+        .reset-section input[type="text"]::placeholder {
+            color: #555;
+        }
+        .reset-section button {
+            padding: 4px 12px;
+            font-size: 0.98rem;
+            border-radius: 6px;
+            background: #2e7d32;
+            color: #fff;
+            border: none;
+            transition: background 0.2s;
+        }
+        .reset-section button:hover {
+            background: #43a047;
+        }
+        .reset-message {
+            color: #ffb300;
+            font-size: 0.97rem;
+            margin-left: 8px;
+        }
     </style>
 </head>
 <body>
@@ -246,11 +297,23 @@ HTML_TEMPLATE = """
                 </div>
             </div>
             <button onclick="generateImage()" class="btn btn-primary px-4" id="generate-btn">Generate Image</button>
+            
+            <div class="rate-limit-container">
+                <div class="rate-limit-info" id="rate-limit-info">
+                    Generations left: <span id="generations-left">...</span> / 50
+                </div>
+                <div class="reset-section">
+                    <input type="text" id="reset-code" placeholder="Enter code">
+                    <button onclick="resetLimit()">Reset</button>
+                    <span class="reset-message" id="reset-message"></span>
+                </div>
+            </div>
+            
             <div class="loading" id="loading" style="margin-bottom:0;">
                 <div class="spinner-border" role="status">
                     <span class="visually-hidden">Loading...</span>
                 </div>
-                <p class="mt-2">Generating your masterpiece...</p>
+                <p class="mt-2">Generating your art...</p>
             </div>
             <div class="image-grid" id="image-grid"></div>
             <div id="error-message" class="text-danger mt-3"></div>
@@ -356,6 +419,52 @@ HTML_TEMPLATE = """
         document.getElementById('prompt').addEventListener('keydown', e => {
             if (e.key === 'Enter') generateImage();
         });
+        async function updateGenerationsLeft() {
+            try {
+                const res = await fetch('/rate_limit_status');
+                const data = await res.json();
+                document.getElementById('generations-left').textContent = data.generations_left;
+                
+                // Disable the generate button if no generations left
+                const generateBtn = document.getElementById('generate-btn');
+                generateBtn.disabled = data.generations_left <= 0;
+            } catch (e) {
+                document.getElementById('generations-left').textContent = '?';
+            }
+        }
+        async function resetLimit() {
+            const code = document.getElementById('reset-code').value.trim();
+            const msg = document.getElementById('reset-message');
+            msg.textContent = '';
+            if (!code) {
+                msg.textContent = 'Enter code';
+                return;
+            }
+            try {
+                const res = await fetch('/reset_limit', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ code })
+                });
+                const data = await res.json();
+                if (data.success) {
+                    msg.textContent = 'Reset successful!';
+                    updateGenerationsLeft();
+                } else {
+                    msg.textContent = data.message || 'Reset failed';
+                }
+            } catch (e) {
+                msg.textContent = 'Network error';
+            }
+        }
+        // Update on load and after each generation
+        updateGenerationsLeft();
+        // Patch generateImage to update after generation
+        const origGenerateImage = generateImage;
+        generateImage = async function() {
+            await origGenerateImage();
+            updateGenerationsLeft();
+        }
     </script>
 </body>
 </html>
@@ -365,8 +474,43 @@ HTML_TEMPLATE = """
 def index():
     return render_template_string(HTML_TEMPLATE)
 
+# --- Simple in-memory rate limiter ---
+RATE_LIMIT = 50  # max requests per hour per IP
+rate_limit_data = {}
+rate_limit_lock = threading.Lock()
+
+def cleanup_rate_limit():
+    """Background thread to clean up old IPs every hour."""
+    while True:
+        now = int(time.time())
+        with rate_limit_lock:
+            to_delete = [ip for ip, (count, ts) in rate_limit_data.items() if now - ts > 3600]
+            for ip in to_delete:
+                del rate_limit_data[ip]
+        time.sleep(600)  # Clean up every 10 minutes
+
+threading.Thread(target=cleanup_rate_limit, daemon=True).start()
+
+def is_rate_limited(ip):
+    now = int(time.time())
+    with rate_limit_lock:
+        count, ts = rate_limit_data.get(ip, (0, now))
+        if now - ts > 3600:
+            # Reset count if more than 1 hour passed
+            rate_limit_data[ip] = (1, now)
+            return False
+        if count >= RATE_LIMIT:
+            return True
+        rate_limit_data[ip] = (count + 1, ts)
+        return False
+
 @app.route('/generate', methods=['POST'])
 def generate_image():
+    # --- Rate limiting ---
+    ip = request.headers.get('X-Forwarded-For', request.remote_addr)
+    if is_rate_limited(ip):
+        return jsonify({"error": "Rate limit exceeded. Max 50 generations per hour."}), 429
+    
     if request.json:
         prompt = request.json.get('prompt', '').strip()
         seed = request.json.get('seed')
@@ -515,6 +659,30 @@ def generate_image():
         }), 500;
 
     return jsonify({"image_urls": image_urls});
+
+@app.route('/rate_limit_status', methods=['GET'])
+def rate_limit_status():
+    ip = request.headers.get('X-Forwarded-For', request.remote_addr)
+    now = int(time.time())
+    with rate_limit_lock:
+        count, ts = rate_limit_data.get(ip, (0, now))
+        if now - ts > 3600:
+            count = 0
+    return jsonify({
+        "generations_left": max(0, RATE_LIMIT - count),
+        "limit": RATE_LIMIT
+    })
+
+@app.route('/reset_limit', methods=['POST'])
+def reset_limit():
+    ip = request.headers.get('X-Forwarded-For', request.remote_addr)
+    data = request.get_json(silent=True) or {}
+    code = data.get('code', '')
+    if code == 'Kameon':
+        with rate_limit_lock:
+            rate_limit_data[ip] = (0, int(time.time()))
+        return jsonify({"success": True, "message": "Generations reset."})
+    return jsonify({"success": False, "message": "Invalid code."}), 403
 
 if __name__ == '__main__':
     app.run(debug=True, threaded=True, port=5000);
