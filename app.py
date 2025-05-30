@@ -4,10 +4,11 @@ import os
 import base64
 import subprocess
 import tempfile
+import random
 
 app = Flask(__name__)
 
-VENICE_API_KEY = "-Y3up9vlEXoVFf1ZsrXhB4rbPXd8V6ywgiSZziI3bR"  # Replace with your actual key
+VENICE_API_KEY = "06c-HIVdt8QNWkbgOh9d5RNgtWHPGweBJ8sbuM7s6e"  # Replace with your actual key
 VENICE_API_URL = "https://api.venice.ai/api/v1/image/generate"  # Correct endpoint
 
 # CORS Headers Setup
@@ -23,7 +24,7 @@ HTML_TEMPLATE = """
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>HiDream Image Generator</title>
+    <title>AI Tattoo Generator</title>
     <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/css/bootstrap.min.css" rel="stylesheet">
     <style>
         html, body { 
@@ -44,11 +45,6 @@ HTML_TEMPLATE = """
             background: rgba(15, 15, 22, 0.7);
             border-radius: 16px;
             padding: 30px;
-            box-shadow: 
-                0 0 10px rgba(80, 100, 255, 0.5),
-                0 0 30px rgba(80, 100, 255, 0.3),
-                0 0 60px rgba(130, 80, 255, 0.2);
-            backdrop-filter: blur(5px);
             width: 90%;
             max-width: 700px;
             position: relative;
@@ -76,6 +72,11 @@ HTML_TEMPLATE = """
             box-shadow: 0 0 15px rgba(120, 200, 255, 0.4);
             outline: none;
         }
+        /* Make placeholder text lighter and more visible */
+        input[type="text"]::placeholder {
+            color: rgba(255, 255, 255, 0.7);
+            opacity: 1;
+        }
         button { 
             background: linear-gradient(135deg, #4CAF50, #2E7D32); 
             color: white; 
@@ -90,61 +91,168 @@ HTML_TEMPLATE = """
             transform: translateY(-2px);
             box-shadow: 0 0 15px rgba(76, 175, 80, 0.6);
         }
-        #generated-image { 
-            max-width: 100%; 
+        .image-grid {
+            display: grid;
+            grid-template-columns: 1fr 1fr;
+            grid-template-rows: 1fr 1fr;
+            gap: 18px;
+            justify-content: center;
+            align-items: center;
             margin-top: 30px;
+        }
+        .image-slot {
+            position: relative;
+            min-width: 160px;
+            min-height: 160px;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            background: #181828;
             border-radius: 8px;
-            box-shadow: 0 0 20px rgba(120, 200, 255, 0.3);
+            box-shadow: 0 0 20px rgba(120, 200, 255, 0.1);
+            height: 100%;
+        }
+        .image-slot .spinner-border {
+            z-index: 2;
+        }
+        .image-slot img {
+            max-width: 320px;
+            width: 100%;
+            border-radius: 8px;
+            display: block;
+            background: #181828;
+        }
+        @media (max-width: 900px) {
+            .image-grid { grid-template-columns: 1fr; grid-template-rows: repeat(4, 1fr);}
+            .image-slot img { max-width: 98vw; }
+        }
+        @media (max-width: 600px) {
+            .image-grid { grid-template-columns: 1fr; grid-template-rows: repeat(4, 1fr);}
+            .image-slot img { max-width: 98vw; }
         }
         .loading { 
             display: none; 
-            margin-top: 30px;  /* Added space to avoid overlap */
+            margin-top: 30px;
         }
         .spinner-border { 
-            width: 3rem; 
+            width: 3rem;
             height: 3rem;
-            color: #4CAF50;
+            color: #4CAF50 !important;
+            border: 0.25em solid #fff !important;
+            border-right-color: transparent !important;
+            border-radius: 50%;
+            animation: spinner-border 0.75s linear infinite;
+        }
+
+        @keyframes spinner-border {
+            0% {
+                transform: rotate(0deg);
+            }
+            100% {
+                transform: rotate(360deg);
+            }
         }
         .checkbox-container {
             display: flex;
+            flex-wrap: wrap;
+            gap: 10px 18px;
             align-items: center;
             margin-bottom: 15px;
+            justify-content: center;
+            row-gap: 10px;
+        }
+        .checkbox-bar-container {
+            width: 100%;
+            max-width: 650px;
+            margin: 0 auto 18px auto;
+            padding: 8px 8px 4px 8px;
+            border-radius: 10px;
+            background: rgba(30, 30, 50, 0.85);
+            border: 1.5px solid #222a38;
+            display: flex;
+            justify-content: center;
+            align-items: center;
+        }
+        .checkbox-bar {
+            display: flex;
+            flex-wrap: wrap;
+            gap: 6px 10px;
+            align-items: center;
+            justify-content: center;
+            width: 100%;
+        }
+        .checkbox-pair {
+            display: flex;
+            align-items: center;
+            white-space: nowrap;
         }
         .neon-checkbox {
-            margin-right: 8px;
-            accent-color: #4CAF50;
-            width: 18px;
-            height: 18px;
+            margin-right: 2px;
+            accent-color: #00ffe7;
+            width: 16px;
+            height: 16px;
             cursor: pointer;
         }
         .checkbox-label {
-            color: rgba(255, 255, 255, 0.9);
-            text-shadow: 0 0 5px rgba(120, 200, 255, 0.5);
-            font-size: 0.95rem;
+            color: #eafffa;
+            text-shadow: 0 0 6px #00ffe7a0;
+            font-size: 0.92rem;
             user-select: none;
             cursor: pointer;
+            margin-right: 4px;
+            margin-bottom: 0;
+            letter-spacing: 0.01em;
+            padding: 0 2px;
         }
     </style>
 </head>
 <body>
     <div class="container text-center">
         <div class="neon-container">
-            <h1 class="mb-4">HiDream Image Generator</h1>
+            <h1 class="mb-4">AI Tattoo Generator</h1>
             <div class="mb-4">
                 <input type="text" class="form-control w-100" id="prompt" placeholder="Enter your image prompt...">
             </div>
-            <div class="checkbox-container">
-                <input type="checkbox" id="tattoo-checkbox" class="neon-checkbox" checked>
-                <label for="tattoo-checkbox" class="checkbox-label">Tattoo (add "tattoo" to prompt)</label>
+            <div class="checkbox-bar-container">
+                <div class="checkbox-bar">
+                    <span class="checkbox-pair">
+                        <input type="checkbox" id="tattoo-checkbox" class="neon-checkbox" checked>
+                        <label for="tattoo-checkbox" class="checkbox-label">Tattoo</label>
+                    </span>
+                    <span class="checkbox-pair">
+                        <input type="checkbox" id="anime-checkbox" class="neon-checkbox">
+                        <label for="anime-checkbox" class="checkbox-label">Anime</label>
+                    </span>
+                    <span class="checkbox-pair">
+                        <input type="checkbox" id="realism-checkbox" class="neon-checkbox">
+                        <label for="realism-checkbox" class="checkbox-label">Realism</label>
+                    </span>
+                    <span class="checkbox-pair">
+                        <input type="checkbox" id="portrait-checkbox" class="neon-checkbox">
+                        <label for="portrait-checkbox" class="checkbox-label">Portrait</label>
+                    </span>
+                    <span class="checkbox-pair">
+                        <input type="checkbox" id="colorful-checkbox" class="neon-checkbox">
+                        <label for="colorful-checkbox" class="checkbox-label">Colorful</label>
+                    </span>
+                    <span class="checkbox-pair">
+                        <input type="checkbox" id="letters-checkbox" class="neon-checkbox">
+                        <label for="letters-checkbox" class="checkbox-label">Letters</label>
+                    </span>
+                    <span class="checkbox-pair">
+                        <input type="checkbox" id="watercolor-checkbox" class="neon-checkbox">
+                        <label for="watercolor-checkbox" class="checkbox-label">Watercolor</label>
+                    </span>
+                </div>
             </div>
             <button onclick="generateImage()" class="btn btn-primary px-4" id="generate-btn">Generate Image</button>
-            <div class="loading" id="loading">
+            <div class="loading" id="loading" style="margin-bottom:0;">
                 <div class="spinner-border" role="status">
                     <span class="visually-hidden">Loading...</span>
                 </div>
                 <p class="mt-2">Generating your masterpiece...</p>
             </div>
-            <img id="generated-image" src="" alt="Generated Image" class="mt-5 d-none">
+            <div class="image-grid" id="image-grid"></div>
             <div id="error-message" class="text-danger mt-3"></div>
         </div>
     </div>
@@ -155,54 +263,96 @@ HTML_TEMPLATE = """
                 showError('Please enter a prompt');
                 return;
             }
-            
-            // Check if tattoo checkbox is selected and append "tattoo" if needed
-            const tattooCheckbox = document.getElementById('tattoo-checkbox');
+            // Collect all checked styles
+            const styleMap = [
+                { id: 'tattoo-checkbox', label: 'tattoo' },
+                { id: 'anime-checkbox', label: 'anime' },
+                { id: 'realism-checkbox', label: 'realism' },
+                { id: 'portrait-checkbox', label: 'portrait' },
+                { id: 'colorful-checkbox', label: 'colorful' },
+                { id: 'letters-checkbox', label: 'letters' },
+                { id: 'watercolor-checkbox', label: 'watercolor' }
+            ];
             let prompt = promptInput;
-            
-            if (tattooCheckbox.checked) {
+            styleMap.forEach(style => {
+                const cb = document.getElementById(style.id);
+                if (cb && cb.checked && style.label !== "tattoo") {
+                    prompt += " " + style.label;
+                }
+            });
+            // Always add "tattoo" if tattoo-checkbox is checked
+            if (document.getElementById('tattoo-checkbox').checked) {
                 prompt += " tattoo";
             }
 
-            const loadingDiv = document.getElementById('loading');
-            const imgElement = document.getElementById('generated-image');
+            const imgGrid = document.getElementById('image-grid');
             const errorDiv = document.getElementById('error-message');
             const btn = document.getElementById('generate-btn');
+            const loadingDiv = document.getElementById('loading');
 
-            loadingDiv.style.display = 'block';
-            imgElement.classList.add('d-none');
+            imgGrid.innerHTML = '';
             errorDiv.textContent = '';
             btn.disabled = true;
+            loadingDiv.style.display = 'block';
 
-            try {
-                const response = await fetch('/generate', {
+            // Show 4 loading slots in a 2x2 grid
+            const slots = [];
+            for (let i = 0; i < 4; i++) {
+                const slot = document.createElement('div');
+                slot.className = 'image-slot';
+                slot.innerHTML = '<div class="spinner-border" role="status"><span class="visually-hidden">Loading...</span></div>';
+                imgGrid.appendChild(slot);
+                slots.push(slot);
+            }
+
+            // Make 4 requests, each with a random seed
+            let completed = 0;
+            for (let i = 0; i < 4; i++) {
+                const seed = Math.floor(Math.random() * 2_000_000_000) - 1_000_000_000;
+                fetch('/generate', {
                     method: 'POST',
                     headers: { 'Content-Type': 'application/json' },
-                    body: JSON.stringify({ prompt })
+                    body: JSON.stringify({ prompt, seed })
+                })
+                .then(res => res.json())
+                .then(data => {
+                    slots[i].innerHTML = '';
+                    if (data.image_urls && Array.isArray(data.image_urls) && data.image_urls[0]) {
+                        const img = document.createElement('img');
+                        img.src = data.image_urls[0];
+                        img.alt = "Generated Image";
+                        img.onload = () => img.classList.remove('d-none');
+                        img.onerror = () => showError('Image failed to load');
+                        slots[i].appendChild(img);
+                    } else if (data.image_url) {
+                        const img = document.createElement('img');
+                        img.src = data.image_url;
+                        img.alt = "Generated Image";
+                        img.onload = () => img.classList.remove('d-none');
+                        img.onerror = () => showError('Image failed to load');
+                        slots[i].appendChild(img);
+                    } else {
+                        slots[i].innerHTML = '<span style="color:#f66;">Error</span>';
+                        showError(data.error || 'API error');
+                    }
+                })
+                .catch(err => {
+                    slots[i].innerHTML = '<span style="color:#f66;">Error</span>';
+                    showError('Network error. Check console.');
+                    console.error(err);
+                })
+                .finally(() => {
+                    completed++;
+                    if (completed === 4) {
+                        loadingDiv.style.display = 'none';
+                        btn.disabled = false;
+                    }
                 });
-
-                const data = await response.json();
-
-                if (data.image_url) {
-                    imgElement.onload = () => imgElement.classList.remove('d-none');
-                    imgElement.onerror = () => showError('Image failed to load');
-                    imgElement.src = data.image_url;
-                } else {
-                    showError(data.error || 'API error');
-                }
-            } catch (err) {
-                showError('Network error. Check console.');
-                console.error(err);
-            } finally {
-                loadingDiv.style.display = 'none';
-                btn.disabled = false;
             }
         }
-
         function showError(msg) {
             document.getElementById('error-message').textContent = msg;
         }
-
         document.getElementById('prompt').addEventListener('keydown', e => {
             if (e.key === 'Enter') generateImage();
         });
@@ -219,20 +369,26 @@ def index():
 def generate_image():
     if request.json:
         prompt = request.json.get('prompt', '').strip()
+        seed = request.json.get('seed')
     else:
         prompt = ''
+        seed = None
     if not prompt:
         return jsonify({"error": "Empty prompt"}), 400
 
-    # Update payload to match API documentation
+    # Add a random seed if provided, to ensure different generations
     payload = {
         "prompt": prompt,
         "model": "hidream",
-        "format": "png",  # Explicitly request PNG format
-        "return_binary": False,  # We want base64 data
-        "safe_mode": True,  # Optional: disable content filtering
-        "hide_watermark": True  # Remove Venice watermark
+        "format": "png",
+        "return_binary": False,
+        "safe_mode": True,
+        "hide_watermark": True
     }
+    if seed is not None:
+        payload["seed"] = seed
+    else:
+        payload["seed"] = random.randint(-999_999_999, 999_999_999)
 
     headers = {
         "Authorization": f"Bearer {VENICE_API_KEY}",
@@ -248,7 +404,6 @@ def generate_image():
         data = response.json()
         print("Response top-level keys:", list(data.keys()) if isinstance(data, dict) else "Not a dictionary")
     except requests.exceptions.HTTPError as e:
-        # Try to return the API's error message if available
         error_data = None
         if response is not None:
             try:
@@ -262,115 +417,104 @@ def generate_image():
     except Exception as e:
         return jsonify({"error": f"API request failed: {str(e)}"}), 500
 
-    # Extract image from response according to API documentation
-    image_url = None
-    
+    # Extract images from response according to API documentation
+    image_urls = []
     if isinstance(data, dict):
-        # According to documentation, the images field should contain base64 encoded data
         if "images" in data and isinstance(data["images"], list) and data["images"]:
-            # Convert first base64 image to data URL
-            base64_img = data["images"][0]
-            if isinstance(base64_img, str):
-                # For safety, remove any existing data URL prefix if present
-                if base64_img.startswith("data:"):
-                    # Extract just the base64 part
-                    base64_content = base64_img.split(",", 1)[1]
-                else:
-                    base64_content = base64_img
-                    
-                # Create a proper data URL for the image (assuming PNG as requested)
-                image_url = f"data:image/png;base64,{base64_content}"
-                print("Created data URL from base64 image data")
-    
+            for base64_img in data["images"]:
+                if isinstance(base64_img, str):
+                    if base64_img.startswith("data:"):
+                        base64_content = base64_img.split(",", 1)[1]
+                    else:
+                        base64_content = base64_img
+                    image_urls.append(f"data:image/png;base64,{base64_content}")
     # If we still can't find an image, try the old extraction methods
-    if not image_url:
+    if not image_urls:
         print("Primary extraction failed, trying fallback methods...")
         # Direct URL in data
         if "url" in data:
-            image_url = data["url"]
+            image_url = data["url"];
         elif "image" in data:
-            image_url = data["image"] if isinstance(data["image"], str) else None
+            image_url = data["image"] if isinstance(data["image"], str) else None;
         elif "image_url" in data:
-            image_url = data["image_url"]
+            image_url = data["image_url"];
         # Venice API specific formats
         elif "output" in data:
-            output = data["output"]
+            output = data["output"];
             if isinstance(output, str):  # Direct URL string
-                image_url = output
+                image_url = output;
             elif isinstance(output, dict):
-                image_url = output.get("url") or output.get("image_url") or output.get("image")
+                image_url = output.get("url") or output.get("image_url") or output.get("image");
             elif isinstance(output, list) and output:  # List of URLs or objects
-                first_item = output[0]
+                first_item = output[0];
                 if isinstance(first_item, str):
-                    image_url = first_item
+                    image_url = first_item;
                 elif isinstance(first_item, dict):
-                    image_url = first_item.get("url") or first_item.get("image_url")
+                    image_url = first_item.get("url") or first_item.get("image_url");
         # Nested response formats
         elif "result" in data:
-            result = data["result"]
+            result = data["result"];
             if isinstance(result, str):  # Direct URL string
-                image_url = result
+                image_url = result;
             elif isinstance(result, dict):
-                image_url = result.get("url") or result.get("image_url") or result.get("image")
+                image_url = result.get("url") or result.get("image_url") or result.get("image");
         # List formats
         elif "images" in data:
-            images = data["images"]
+            images = data["images"];
             if isinstance(images, list) and images:
-                first_image = images[0]
+                first_image = images[0];
                 if isinstance(first_image, str):
-                    image_url = first_image
+                    image_url = first_image;
                 elif isinstance(first_image, dict):
-                    image_url = first_image.get("url")
+                    image_url = first_image.get("url");
             elif isinstance(images, str):
-                image_url = images
+                image_url = images;
             elif isinstance(images, dict):
-                image_url = images.get("url")
+                image_url = images.get("url");
         # Data wrapper format
         elif "data" in data:
-            data_obj = data["data"]
+            data_obj = data["data"];
             if isinstance(data_obj, str):
-                image_url = data_obj
+                image_url = data_obj;
             elif isinstance(data_obj, dict):
                 image_url = (data_obj.get("url") or data_obj.get("image_url") or
-                            data_obj.get("image"))
+                            data_obj.get("image"));
             elif isinstance(data_obj, list) and data_obj:
-                first_item = data_obj[0]
+                first_item = data_obj[0];
                 if isinstance(first_item, str):
-                    image_url = first_item
+                    image_url = first_item;
                 elif isinstance(first_item, dict):
-                    image_url = first_item.get("url") or first_item.get("image_url")
+                    image_url = first_item.get("url") or first_item.get("image_url");
     
     # Print the extracted URL for debugging
-    print("Extracted image URL:", image_url)
+    print("Extracted image URLs:", image_urls);
     
-    # Handle JXL format conversion
-    if image_url and image_url.startswith("data:image/jxl;base64"):
-        try:
-            jxl_data = base64.b64decode(image_url.split(',', 1)[1])
-            with tempfile.NamedTemporaryFile(suffix='.jxl', delete=False) as jxl_file:
-                jxl_file.write(jxl_data)
-                jxl_path = jxl_file.name
-            png_path = tempfile.mktemp(suffix='.png');
+    # Handle JXL format conversion for all images
+    for idx, img_url in enumerate(image_urls):
+        if img_url and img_url.startswith("data:image/jxl;base64"):
+            try:
+                jxl_data = base64.b64decode(img_url.split(',', 1)[1])
+                with tempfile.NamedTemporaryFile(suffix='.jxl', delete=False) as jxl_file:
+                    jxl_file.write(jxl_data)
+                    jxl_path = jxl_file.name
+                png_path = tempfile.mktemp(suffix='.png')
+                subprocess.run(['djxl', jxl_path, png_path], check=True)
+                with open(png_path, 'rb') as png_file:
+                    png_data = base64.b64encode(png_file.read()).decode()
+                    image_urls[idx] = f"data:image/png;base64,{png_data}"
+                os.remove(jxl_path)
+                os.remove(png_path);
+            except Exception as e:
+                print(f"JXL conversion failed: {e}")
+                return jsonify({"error": "Failed to process image format"}), 500
 
-            subprocess.run(['djxl', jxl_path, png_path], check=True);
-
-            with open(png_path, 'rb') as png_file:
-                png_data = base64.b64encode(png_file.read()).decode();
-                image_url = f"data:image/png;base64,{png_data}";
-
-            os.remove(jxl_path);
-            os.remove(png_path);
-        except Exception as e:
-            print(f"JXL conversion failed: {e}")
-            return jsonify({"error": "Failed to process image format"}), 500
-
-    if not image_url or (not image_url.startswith("http") and not image_url.startswith("data:image")):
+    if not image_urls or not any(url.startswith("http") or url.startswith("data:image") for url in image_urls):
         return jsonify({
             "error": "Image URL not found",
             "api_response": data  # Debug data [REF]0
-        }), 500
+        }), 500;
 
-    return jsonify({"image_url": image_url})
+    return jsonify({"image_urls": image_urls});
 
 if __name__ == '__main__':
-    app.run(debug=True, threaded=True, port=5000)
+    app.run(debug=True, threaded=True, port=5000);
