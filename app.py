@@ -255,6 +255,11 @@ HTML_TEMPLATE = """
             font-size: 0.97rem;
             margin-left: 8px;
         }
+        .reset-timer {
+            color: #ffb300;
+            font-size: 0.97rem;
+            margin-left: 8px;
+        }
     </style>
 </head>
 <body>
@@ -301,6 +306,7 @@ HTML_TEMPLATE = """
             <div class="rate-limit-container">
                 <div class="rate-limit-info" id="rate-limit-info">
                     Generations left: <span id="generations-left">...</span> / 50
+                    <span class="reset-timer" id="reset-timer"></span>
                 </div>
                 <div class="reset-section">
                     <input type="text" id="reset-code" placeholder="Enter code">
@@ -320,6 +326,34 @@ HTML_TEMPLATE = """
         </div>
     </div>
     <script>
+        let resetAtEpoch = null;
+        let resetTimerInterval = null;
+
+        function formatTimeLeft(seconds) {
+            if (seconds <= 0) return "Resetting soon";
+            const m = Math.floor(seconds / 60);
+            const s = seconds % 60;
+            return `Resets in ${m}:${s.toString().padStart(2, '0')}`;
+        }
+
+        function updateResetTimer() {
+            const timerSpan = document.getElementById('reset-timer');
+            if (!resetAtEpoch) {
+                timerSpan.textContent = '';
+                return;
+            }
+            const now = Math.floor(Date.now() / 1000);
+            const secondsLeft = resetAtEpoch - now;
+            if (secondsLeft > 0) {
+                timerSpan.textContent = formatTimeLeft(secondsLeft);
+            } else {
+                timerSpan.textContent = '';
+                clearInterval(resetTimerInterval);
+                resetTimerInterval = null;
+                updateGenerationsLeft();
+            }
+        }
+
         async function generateImage() {
             const promptInput = document.getElementById('prompt').value.trim();
             if (!promptInput) {
@@ -424,12 +458,26 @@ HTML_TEMPLATE = """
                 const res = await fetch('/rate_limit_status');
                 const data = await res.json();
                 document.getElementById('generations-left').textContent = data.generations_left;
-                
+                resetAtEpoch = data.reset_at;
                 // Disable the generate button if no generations left
                 const generateBtn = document.getElementById('generate-btn');
                 generateBtn.disabled = data.generations_left <= 0;
+                // Show/hide timer
+                if (data.generations_left <= 0 && resetAtEpoch) {
+                    updateResetTimer();
+                    if (!resetTimerInterval) {
+                        resetTimerInterval = setInterval(updateResetTimer, 1000);
+                    }
+                } else {
+                    document.getElementById('reset-timer').textContent = '';
+                    if (resetTimerInterval) {
+                        clearInterval(resetTimerInterval);
+                        resetTimerInterval = null;
+                    }
+                }
             } catch (e) {
                 document.getElementById('generations-left').textContent = '?';
+                document.getElementById('reset-timer').textContent = '';
             }
         }
         async function resetLimit() {
@@ -668,9 +716,12 @@ def rate_limit_status():
         count, ts = rate_limit_data.get(ip, (0, now))
         if now - ts > 3600:
             count = 0
+            ts = now
+        reset_at = ts + 3600 if count > 0 else now
     return jsonify({
         "generations_left": max(0, RATE_LIMIT - count),
-        "limit": RATE_LIMIT
+        "limit": RATE_LIMIT,
+        "reset_at": reset_at
     })
 
 @app.route('/reset_limit', methods=['POST'])
