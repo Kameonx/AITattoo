@@ -206,60 +206,6 @@ HTML_TEMPLATE = """
             letter-spacing: 0.01em;
             padding: 0 2px;
         }
-        .rate-limit-info {
-            margin: 10px 0;
-            color: #aaffcc;
-            font-size: 1.05rem;
-            text-shadow: 0 0 4px #1f3;
-        }
-        .rate-limit-container {
-            display: flex;
-            justify-content: space-between;
-            align-items: center;
-            margin: 18px 0;
-            flex-wrap: wrap;
-            gap: 10px;
-        }
-        .reset-section {
-            display: flex;
-            align-items: center;
-            gap: 8px;
-            justify-content: flex-end;
-        }
-        .reset-section input[type="text"] {
-            width: 120px;
-            padding: 4px 8px;
-            font-size: 0.98rem;
-            border-radius: 6px;
-            border: 1px solid #2a3040;
-            background: rgba(15, 15, 22, 0.7);
-            color: #666;
-        }
-        .reset-section input[type="text"]::placeholder {
-            color: #555;
-        }
-        .reset-section button {
-            padding: 4px 12px;
-            font-size: 0.98rem;
-            border-radius: 6px;
-            background: #2e7d32;
-            color: #fff;
-            border: none;
-            transition: background 0.2s;
-        }
-        .reset-section button:hover {
-            background: #43a047;
-        }
-        .reset-message {
-            color: #ffb300;
-            font-size: 0.97rem;
-            margin-left: 8px;
-        }
-        .reset-timer {
-            color: #ffb300;
-            font-size: 0.97rem;
-            margin-left: 8px;
-        }
     </style>
 </head>
 <body>
@@ -303,18 +249,6 @@ HTML_TEMPLATE = """
             </div>
             <button onclick="generateImage()" class="btn btn-primary px-4" id="generate-btn">Generate Image</button>
             
-            <div class="rate-limit-container">
-                <div class="rate-limit-info" id="rate-limit-info">
-                    Generations left: <span id="generations-left">...</span> / 50
-                    <span class="reset-timer" id="reset-timer"></span>
-                </div>
-                <div class="reset-section">
-                    <input type="text" id="reset-code" placeholder="Enter code">
-                    <button onclick="resetLimit()">Reset</button>
-                    <span class="reset-message" id="reset-message"></span>
-                </div>
-            </div>
-            
             <div class="loading" id="loading" style="margin-bottom:0;">
                 <div class="spinner-border" role="status">
                     <span class="visually-hidden">Loading...</span>
@@ -326,35 +260,7 @@ HTML_TEMPLATE = """
         </div>
     </div>
     <script>
-        let resetAtEpoch = null;
-        let resetTimerInterval = null;
-
-        function formatTimeLeft(seconds) {
-            if (seconds <= 0) return "Resetting soon";
-            const m = Math.floor(seconds / 60);
-            const s = seconds % 60;
-            return `Resets in ${m}:${s.toString().padStart(2, '0')}`;
-        }
-
-        function updateResetTimer() {
-            const timerSpan = document.getElementById('reset-timer');
-            if (!resetAtEpoch) {
-                timerSpan.textContent = '';
-                return;
-            }
-            const now = Math.floor(Date.now() / 1000);
-            const secondsLeft = resetAtEpoch - now;
-            if (secondsLeft > 0) {
-                timerSpan.textContent = formatTimeLeft(secondsLeft);
-            } else {
-                timerSpan.textContent = '';
-                clearInterval(resetTimerInterval);
-                resetTimerInterval = null;
-                updateGenerationsLeft();
-            }
-        }
-
-        async function generateImage() {
+        function generateImage() {
             const promptInput = document.getElementById('prompt').value.trim();
             if (!promptInput) {
                 showError('Please enter a prompt');
@@ -453,66 +359,6 @@ HTML_TEMPLATE = """
         document.getElementById('prompt').addEventListener('keydown', e => {
             if (e.key === 'Enter') generateImage();
         });
-        async function updateGenerationsLeft() {
-            try {
-                const res = await fetch('/rate_limit_status');
-                const data = await res.json();
-                document.getElementById('generations-left').textContent = data.generations_left;
-                resetAtEpoch = data.reset_at;
-                // Disable the generate button if no generations left
-                const generateBtn = document.getElementById('generate-btn');
-                generateBtn.disabled = data.generations_left <= 0;
-                // Show/hide timer
-                if (data.generations_left <= 0 && resetAtEpoch) {
-                    updateResetTimer();
-                    if (!resetTimerInterval) {
-                        resetTimerInterval = setInterval(updateResetTimer, 1000);
-                    }
-                } else {
-                    document.getElementById('reset-timer').textContent = '';
-                    if (resetTimerInterval) {
-                        clearInterval(resetTimerInterval);
-                        resetTimerInterval = null;
-                    }
-                }
-            } catch (e) {
-                document.getElementById('generations-left').textContent = '?';
-                document.getElementById('reset-timer').textContent = '';
-            }
-        }
-        async function resetLimit() {
-            const code = document.getElementById('reset-code').value.trim();
-            const msg = document.getElementById('reset-message');
-            msg.textContent = '';
-            if (!code) {
-                msg.textContent = 'Enter code';
-                return;
-            }
-            try {
-                const res = await fetch('/reset_limit', {
-                    method: 'POST',
-                    headers: { 'Content-Type': 'application/json' },
-                    body: JSON.stringify({ code })
-                });
-                const data = await res.json();
-                if (data.success) {
-                    msg.textContent = 'Reset successful!';
-                    updateGenerationsLeft();
-                } else {
-                    msg.textContent = data.message || 'Reset failed';
-                }
-            } catch (e) {
-                msg.textContent = 'Network error';
-            }
-        }
-        // Update on load and after each generation
-        updateGenerationsLeft();
-        // Patch generateImage to update after generation
-        const origGenerateImage = generateImage;
-        generateImage = async function() {
-            await origGenerateImage();
-            updateGenerationsLeft();
-        }
     </script>
 </body>
 </html>
@@ -522,43 +368,8 @@ HTML_TEMPLATE = """
 def index():
     return render_template_string(HTML_TEMPLATE)
 
-# --- Simple in-memory rate limiter ---
-RATE_LIMIT = 50  # max requests per hour per IP
-rate_limit_data = {}
-rate_limit_lock = threading.Lock()
-
-def cleanup_rate_limit():
-    """Background thread to clean up old IPs every hour."""
-    while True:
-        now = int(time.time())
-        with rate_limit_lock:
-            to_delete = [ip for ip, (count, ts) in rate_limit_data.items() if now - ts > 3600]
-            for ip in to_delete:
-                del rate_limit_data[ip]
-        time.sleep(600)  # Clean up every 10 minutes
-
-threading.Thread(target=cleanup_rate_limit, daemon=True).start()
-
-def is_rate_limited(ip):
-    now = int(time.time())
-    with rate_limit_lock:
-        count, ts = rate_limit_data.get(ip, (0, now))
-        if now - ts > 3600:
-            # Reset count if more than 1 hour passed
-            rate_limit_data[ip] = (1, now)
-            return False
-        if count >= RATE_LIMIT:
-            return True
-        rate_limit_data[ip] = (count + 1, ts)
-        return False
-
 @app.route('/generate', methods=['POST'])
 def generate_image():
-    # --- Rate limiting ---
-    ip = request.headers.get('X-Forwarded-For', request.remote_addr)
-    if is_rate_limited(ip):
-        return jsonify({"error": "Rate limit exceeded. Max 50 generations per hour."}), 429
-    
     if request.json:
         prompt = request.json.get('prompt', '').strip()
         seed = request.json.get('seed')
@@ -568,7 +379,6 @@ def generate_image():
     if not prompt:
         return jsonify({"error": "Empty prompt"}), 400
 
-    # Add a random seed if provided, to ensure different generations
     payload = {
         "prompt": prompt,
         "model": "hidream",
@@ -623,64 +433,60 @@ def generate_image():
     # If we still can't find an image, try the old extraction methods
     if not image_urls:
         print("Primary extraction failed, trying fallback methods...")
-        # Direct URL in data
+        image_url = None
         if "url" in data:
-            image_url = data["url"];
+            image_url = data["url"]
         elif "image" in data:
-            image_url = data["image"] if isinstance(data["image"], str) else None;
+            image_url = data["image"] if isinstance(data["image"], str) else None
         elif "image_url" in data:
-            image_url = data["image_url"];
-        # Venice API specific formats
+            image_url = data["image_url"]
         elif "output" in data:
-            output = data["output"];
-            if isinstance(output, str):  # Direct URL string
-                image_url = output;
+            output = data["output"]
+            if isinstance(output, str):
+                image_url = output
             elif isinstance(output, dict):
-                image_url = output.get("url") or output.get("image_url") or output.get("image");
-            elif isinstance(output, list) and output:  # List of URLs or objects
-                first_item = output[0];
+                image_url = output.get("url") or output.get("image_url") or output.get("image")
+            elif isinstance(output, list) and output:
+                first_item = output[0]
                 if isinstance(first_item, str):
-                    image_url = first_item;
+                    image_url = first_item
                 elif isinstance(first_item, dict):
-                    image_url = first_item.get("url") or first_item.get("image_url");
-        # Nested response formats
+                    image_url = first_item.get("url") or first_item.get("image_url")
         elif "result" in data:
-            result = data["result"];
-            if isinstance(result, str):  # Direct URL string
-                image_url = result;
+            result = data["result"]
+            if isinstance(result, str):
+                image_url = result
             elif isinstance(result, dict):
-                image_url = result.get("url") or result.get("image_url") or result.get("image");
-        # List formats
+                image_url = result.get("url") or result.get("image_url") or result.get("image")
         elif "images" in data:
-            images = data["images"];
+            images = data["images"]
             if isinstance(images, list) and images:
-                first_image = images[0];
+                first_image = images[0]
                 if isinstance(first_image, str):
-                    image_url = first_image;
+                    image_url = first_image
                 elif isinstance(first_image, dict):
-                    image_url = first_image.get("url");
+                    image_url = first_image.get("url")
             elif isinstance(images, str):
-                image_url = images;
+                image_url = images
             elif isinstance(images, dict):
-                image_url = images.get("url");
-        # Data wrapper format
+                image_url = images.get("url")
         elif "data" in data:
-            data_obj = data["data"];
+            data_obj = data["data"]
             if isinstance(data_obj, str):
-                image_url = data_obj;
+                image_url = data_obj
             elif isinstance(data_obj, dict):
-                image_url = (data_obj.get("url") or data_obj.get("image_url") or
-                            data_obj.get("image"));
+                image_url = (data_obj.get("url") or data_obj.get("image_url") or data_obj.get("image"))
             elif isinstance(data_obj, list) and data_obj:
-                first_item = data_obj[0];
+                first_item = data_obj[0]
                 if isinstance(first_item, str):
-                    image_url = first_item;
+                    image_url = first_item
                 elif isinstance(first_item, dict):
-                    image_url = first_item.get("url") or first_item.get("image_url");
-    
-    # Print the extracted URL for debugging
-    print("Extracted image URLs:", image_urls);
-    
+                    image_url = first_item.get("url") or first_item.get("image_url")
+        if image_url:
+            image_urls = [image_url]
+
+    print("Extracted image URLs:", image_urls)
+
     # Handle JXL format conversion for all images
     for idx, img_url in enumerate(image_urls):
         if img_url and img_url.startswith("data:image/jxl;base64"):
@@ -695,7 +501,7 @@ def generate_image():
                     png_data = base64.b64encode(png_file.read()).decode()
                     image_urls[idx] = f"data:image/png;base64,{png_data}"
                 os.remove(jxl_path)
-                os.remove(png_path);
+                os.remove(png_path)
             except Exception as e:
                 print(f"JXL conversion failed: {e}")
                 return jsonify({"error": "Failed to process image format"}), 500
@@ -704,36 +510,9 @@ def generate_image():
         return jsonify({
             "error": "Image URL not found",
             "api_response": data  # Debug data [REF]0
-        }), 500;
+        }), 500
 
-    return jsonify({"image_urls": image_urls});
-
-@app.route('/rate_limit_status', methods=['GET'])
-def rate_limit_status():
-    ip = request.headers.get('X-Forwarded-For', request.remote_addr)
-    now = int(time.time())
-    with rate_limit_lock:
-        count, ts = rate_limit_data.get(ip, (0, now))
-        if now - ts > 3600:
-            count = 0
-            ts = now
-        reset_at = ts + 3600 if count > 0 else now
-    return jsonify({
-        "generations_left": max(0, RATE_LIMIT - count),
-        "limit": RATE_LIMIT,
-        "reset_at": reset_at
-    })
-
-@app.route('/reset_limit', methods=['POST'])
-def reset_limit():
-    ip = request.headers.get('X-Forwarded-For', request.remote_addr)
-    data = request.get_json(silent=True) or {}
-    code = data.get('code', '')
-    if code == 'Kameon':
-        with rate_limit_lock:
-            rate_limit_data[ip] = (0, int(time.time()))
-        return jsonify({"success": True, "message": "Generations reset."})
-    return jsonify({"success": False, "message": "Invalid code."}), 403
+    return jsonify({"image_urls": image_urls})
 
 if __name__ == '__main__':
-    app.run(debug=True, threaded=True, port=5000);
+    app.run(debug=True, threaded=True, port=5000)
