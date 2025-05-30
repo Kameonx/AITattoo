@@ -222,20 +222,12 @@ HTML_TEMPLATE = """
                         <label for="tattoo-checkbox" class="checkbox-label">Tattoo</label>
                     </span>
                     <span class="checkbox-pair">
+                        <input type="checkbox" id="symmetrical-checkbox" class="neon-checkbox" checked>
+                        <label for="symmetrical-checkbox" class="checkbox-label">Symmetrical</label>
+                    </span>
+                    <span class="checkbox-pair">
                         <input type="checkbox" id="anime-checkbox" class="neon-checkbox">
-                        <label for="anime-checkbox" class="checkbox-label">Anime</label>
-                    </span>
-                    <span class="checkbox-pair">
-                        <input type="checkbox" id="realism-checkbox" class="neon-checkbox">
-                        <label for="realism-checkbox" class="checkbox-label">Realism</label>
-                    </span>
-                    <span class="checkbox-pair">
-                        <input type="checkbox" id="portrait-checkbox" class="neon-checkbox">
-                        <label for="portrait-checkbox" class="checkbox-label">Portrait</label>
-                    </span>
-                    <span class="checkbox-pair">
-                        <input type="checkbox" id="colorful-checkbox" class="neon-checkbox">
-                        <label for="colorful-checkbox" class="checkbox-label">Colorful</label>
+                        <label for="anime-checkbox" class="checkbox-label">Anime Style</label>
                     </span>
                     <span class="checkbox-pair">
                         <input type="checkbox" id="letters-checkbox" class="neon-checkbox">
@@ -244,6 +236,10 @@ HTML_TEMPLATE = """
                     <span class="checkbox-pair">
                         <input type="checkbox" id="watercolor-checkbox" class="neon-checkbox">
                         <label for="watercolor-checkbox" class="checkbox-label">Watercolor</label>
+                    </span>
+                    <span class="checkbox-pair">
+                        <input type="checkbox" id="geometric-checkbox" class="neon-checkbox">
+                        <label for="geometric-checkbox" class="checkbox-label">Geometric</label>
                     </span>
                 </div>
             </div>
@@ -269,16 +265,16 @@ HTML_TEMPLATE = """
             // Collect all checked styles
             const styleMap = [
                 { id: 'tattoo-checkbox', label: 'tattoo' },
-                { id: 'anime-checkbox', label: 'anime' },
-                { id: 'realism-checkbox', label: 'realism' },
-                { id: 'portrait-checkbox', label: 'portrait' },
-                { id: 'colorful-checkbox', label: 'colorful' },
+                { id: 'symmetrical-checkbox', label: 'symmetrical' },
+                { id: 'anime-checkbox', label: 'anime style' },
                 { id: 'letters-checkbox', label: 'letters' },
-                { id: 'watercolor-checkbox', label: 'watercolor' }
+                { id: 'watercolor-checkbox', label: 'watercolor' },
+                { id: 'geometric-checkbox', label: 'geometric' }
             ];
             let prompt = promptInput;
             styleMap.forEach(style => {
                 const cb = document.getElementById(style.id);
+                // skip tattoo, will be handled below
                 if (cb && cb.checked && style.label !== "tattoo") {
                     prompt += " " + style.label;
                 }
@@ -318,7 +314,7 @@ HTML_TEMPLATE = """
                     body: JSON.stringify({ prompt, seed })
                 })
                 .then(res => res.json())
-                .then(data => {
+                .then((data) => {
                     slots[i].innerHTML = '';
                     if (data.image_urls && Array.isArray(data.image_urls) && data.image_urls[0]) {
                         const img = document.createElement('img');
@@ -498,10 +494,10 @@ def generate_image():
                 png_path = tempfile.mktemp(suffix='.png')
                 subprocess.run(['djxl', jxl_path, png_path], check=True)
                 with open(png_path, 'rb') as png_file:
-                    png_data = base64.b64encode(png_file.read()).decode()
-                    image_urls[idx] = f"data:image/png;base64,{png_data}"
-                os.remove(jxl_path)
-                os.remove(png_path)
+                    png_data = base64.b64encode(png_file.read()).decode();
+                    image_urls[idx] = f"data:image/png;base64,{png_data}";
+                os.remove(jxl_path);
+                os.remove(png_path);
             except Exception as e:
                 print(f"JXL conversion failed: {e}")
                 return jsonify({"error": "Failed to process image format"}), 500
