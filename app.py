@@ -7,10 +7,13 @@ import tempfile
 import random
 import threading
 import time
+from dotenv import load_dotenv
+
+load_dotenv()
 
 app = Flask(__name__)
 
-VENICE_API_KEY = "06c-HIVdt8QNWkbgOh9d5RNgtWHPGweBJ8sbuM7s6e" 
+VENICE_API_KEY = os.environ.get("VENICE_API_KEY")
 VENICE_API_URL = "https://api.venice.ai/api/v1/image/generate" 
 
 # CORS Headers Setup
@@ -559,10 +562,10 @@ def generate_image():
 
     response = None
     try:
-        response = requests.post(VENICE_API_URL, json=payload, headers=headers, timeout=60);
+        response = requests.post(VENICE_API_URL, json=payload, headers=headers, timeout=60)
         print("Venice API status:", response.status_code)
         print("Venice API response:", response.text[:500] + "..." if len(response.text) > 500 else response.text)
-        response.raise_for_status();
+        response.raise_for_status()
         data = response.json()
         print("Response top-level keys:", list(data.keys()) if isinstance(data, dict) else "Not a dictionary")
     except requests.exceptions.HTTPError as e:
@@ -592,7 +595,7 @@ def generate_image():
                     image_urls.append(f"data:image/png;base64,{base64_content}")
     if not image_urls:
         print("Primary extraction failed, trying fallback methods...")
-        image_url = None;
+        image_url = None
         if "url" in data:
             image_url = data["url"]
         elif "image" in data:
@@ -657,7 +660,7 @@ def generate_image():
                 png_path = tempfile.mktemp(suffix='.png')
                 subprocess.run(['djxl', jxl_path, png_path], check=True)
                 with open(png_path, 'rb') as png_file:
-                    png_data = base64.b64encode(png_file.read()).decode();
+                    png_data = base64.b64encode(png_file.read()).decode()
                     image_urls[idx] = f"data:image/png;base64,{png_data}"
                 os.remove(jxl_path)
                 os.remove(png_path)
@@ -671,7 +674,8 @@ def generate_image():
             "api_response": data  # Debug data [REF]0
         }), 500
 
-    return jsonify({"image_urls": image_urls})
+    return jsonify({"image_urls": image_urls});
+
 
 if __name__ == '__main__':
     app.run(debug=True, threaded=True, port=5000)
