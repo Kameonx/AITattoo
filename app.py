@@ -258,6 +258,10 @@ HTML_TEMPLATE = """
                         <label for="symmetrical-checkbox" class="checkbox-label">Symmetrical</label>
                     </span>
                     <span class="checkbox-pair">
+                        <input type="checkbox" id="geometric-checkbox" class="neon-checkbox">
+                        <label for="geometric-checkbox" class="checkbox-label">Geometric</label>
+                    </span>
+                    <span class="checkbox-pair">
                         <input type="checkbox" id="anime-checkbox" class="neon-checkbox">
                         <label for="anime-checkbox" class="checkbox-label">Anime Style</label>
                     </span>
@@ -268,10 +272,6 @@ HTML_TEMPLATE = """
                     <span class="checkbox-pair">
                         <input type="checkbox" id="watercolor-checkbox" class="neon-checkbox">
                         <label for="watercolor-checkbox" class="checkbox-label">Watercolor</label>
-                    </span>
-                    <span class="checkbox-pair">
-                        <input type="checkbox" id="geometric-checkbox" class="neon-checkbox">
-                        <label for="geometric-checkbox" class="checkbox-label">Geometric</label>
                     </span>
                 </div>
             </div>
@@ -309,32 +309,47 @@ HTML_TEMPLATE = """
 
         function generateImage() {
             const promptInput = document.getElementById('prompt').value.trim();
-            if (!promptInput && !uploadedImage) {
-                showError('Please enter a prompt or upload an image');
-                return;
-            }
-            
             // Collect all checked styles
             const styleMap = [
                 { id: 'tattoo-checkbox', label: 'tattoo' },
                 { id: 'symmetrical-checkbox', label: 'symmetrical' },
+                { id: 'geometric-checkbox', label: 'geometric' },
                 { id: 'anime-checkbox', label: 'anime style' },
                 { id: 'letters-checkbox', label: 'letters' },
-                { id: 'watercolor-checkbox', label: 'watercolor' },
-                { id: 'geometric-checkbox', label: 'geometric' }
+                { id: 'watercolor-checkbox', label: 'watercolor' }
             ];
-            
-            let prompt = promptInput;
-            styleMap.forEach(style => {
+
+            // Get checked checkboxes
+            const checkedStyles = styleMap.filter(style => {
                 const cb = document.getElementById(style.id);
-                if (cb && cb.checked && style.label !== "tattoo") {
-                    prompt += " " + style.label;
-                }
+                return cb && cb.checked;
             });
-            
-            // Always add "tattoo" if tattoo-checkbox is checked
-            if (document.getElementById('tattoo-checkbox').checked) {
-                prompt += " tattoo";
+
+            if (checkedStyles.length === 0) {
+                showError('Please check at least one style option.');
+                return;
+            }
+
+            let prompt = promptInput;
+            // If prompt is empty, build it from checked checkboxes
+            if (!prompt) {
+                prompt = checkedStyles.map(style => style.label).join(' ');
+            } else {
+                // If prompt is not empty, append checked styles (except tattoo, which is always appended if checked)
+                checkedStyles.forEach(style => {
+                    if (style.label !== "tattoo") {
+                        prompt += " " + style.label;
+                    }
+                });
+                // Always add "tattoo" if tattoo-checkbox is checked
+                if (document.getElementById('tattoo-checkbox').checked) {
+                    prompt += " tattoo";
+                }
+            }
+
+            if (!prompt && !uploadedImage) {
+                showError('Please enter a prompt or upload an image');
+                return;
             }
 
             const imgGrid = document.getElementById('image-grid');
@@ -544,7 +559,7 @@ def generate_image():
 
     response = None
     try:
-        response = requests.post(VENICE_API_URL, json=payload, headers=headers, timeout=60)
+        response = requests.post(VENICE_API_URL, json=payload, headers=headers, timeout=60);
         print("Venice API status:", response.status_code)
         print("Venice API response:", response.text[:500] + "..." if len(response.text) > 500 else response.text)
         response.raise_for_status();
