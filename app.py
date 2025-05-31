@@ -265,8 +265,8 @@ HTML_TEMPLATE = """
                         <label for="geometric-checkbox" class="checkbox-label">Geometric</label>
                     </span>
                     <span class="checkbox-pair">
-                        <input type="checkbox" id="anime-checkbox" class="neon-checkbox">
-                        <label for="anime-checkbox" class="checkbox-label">Anime Style</label>
+                        <input type="checkbox" id="traditional-checkbox" class="neon-checkbox">
+                        <label for="traditional-checkbox" class="checkbox-label">Traditional</label>
                     </span>
                     <span class="checkbox-pair">
                         <input type="checkbox" id="letters-checkbox" class="neon-checkbox">
@@ -317,7 +317,7 @@ HTML_TEMPLATE = """
                 { id: 'tattoo-checkbox', label: 'tattoo' },
                 { id: 'symmetrical-checkbox', label: 'symmetrical' },
                 { id: 'geometric-checkbox', label: 'geometric' },
-                { id: 'anime-checkbox', label: 'anime style' },
+                { id: 'traditional-checkbox', label: 'traditional' },
                 { id: 'letters-checkbox', label: 'letters' },
                 { id: 'watercolor-checkbox', label: 'watercolor' }
             ];
@@ -562,28 +562,28 @@ def generate_image():
 
     response = None
     try:
-        response = requests.post(VENICE_API_URL, json=payload, headers=headers, timeout=60)
-        print("Venice API status:", response.status_code)
-        print("Venice API response:", response.text[:500] + "..." if len(response.text) > 500 else response.text)
-        response.raise_for_status()
-        data = response.json()
-        print("Response top-level keys:", list(data.keys()) if isinstance(data, dict) else "Not a dictionary")
+        response = requests.post(VENICE_API_URL, json=payload, headers=headers, timeout=60);
+        print("Venice API status:", response.status_code);
+        print("Venice API response:", response.text[:500] + "..." if len(response.text) > 500 else response.text);
+        response.raise_for_status();
+        data = response.json();
+        print("Response top-level keys:", list(data.keys()) if isinstance(data, dict) else "Not a dictionary");
     except requests.exceptions.HTTPError as e:
-        error_data = None
+        error_data = None;
         if response is not None:
             try:
-                error_data = response.json()
+                error_data = response.json();
             except Exception:
-                error_data = response.text
+                error_data = response.text;
         return jsonify({
             "error": f"API request failed: {str(e)}",
             "api_response": error_data
-        }), response.status_code if response is not None else 500
+        }), response.status_code if response is not None else 500;
     except Exception as e:
-        return jsonify({"error": f"API request failed: {str(e)}"}), 500
+        return jsonify({"error": f"API request failed: {str(e)}"}), 500;
 
     # Extract images from response according to API documentation
-    image_urls = []
+    image_urls = [];
     if isinstance(data, dict):
         if "images" in data and isinstance(data["images"], list) and data["images"]:
             for base64_img in data["images"]:
@@ -594,85 +594,85 @@ def generate_image():
                         base64_content = base64_img
                     image_urls.append(f"data:image/png;base64,{base64_content}")
     if not image_urls:
-        print("Primary extraction failed, trying fallback methods...")
-        image_url = None
+        print("Primary extraction failed, trying fallback methods...");
+        image_url = None;
         if "url" in data:
-            image_url = data["url"]
+            image_url = data["url"];
         elif "image" in data:
-            image_url = data["image"] if isinstance(data["image"], str) else None
+            image_url = data["image"] if isinstance(data["image"], str) else None;
         elif "image_url" in data:
-            image_url = data["image_url"]
+            image_url = data["image_url"];
         elif "output" in data:
-            output = data["output"]
+            output = data["output"];
             if isinstance(output, str):
-                image_url = output
+                image_url = output;
             elif isinstance(output, dict):
-                image_url = output.get("url") or output.get("image_url") or output.get("image")
+                image_url = output.get("url") or output.get("image_url") or output.get("image");
             elif isinstance(output, list) and output:
-                first_item = output[0]
+                first_item = output[0];
                 if isinstance(first_item, str):
-                    image_url = first_item
+                    image_url = first_item;
                 elif isinstance(first_item, dict):
-                    image_url = first_item.get("url") or first_item.get("image_url")
+                    image_url = first_item.get("url") or first_item.get("image_url");
         elif "result" in data:
-            result = data["result"]
+            result = data["result"];
             if isinstance(result, str):
-                image_url = result
+                image_url = result;
             elif isinstance(result, dict):
-                image_url = result.get("url") or result.get("image_url") or result.get("image")
+                image_url = result.get("url") or result.get("image_url") or result.get("image");
         elif "images" in data:
-            images = data["images"]
+            images = data["images"];
             if isinstance(images, list) and images:
-                first_image = images[0]
+                first_image = images[0];
                 if isinstance(first_image, str):
-                    image_url = first_image
+                    image_url = first_image;
                 elif isinstance(first_image, dict):
-                    image_url = first_image.get("url")
+                    image_url = first_image.get("url");
             elif isinstance(images, str):
-                image_url = images
+                image_url = images;
             elif isinstance(images, dict):
-                image_url = images.get("url")
+                image_url = images.get("url");
         elif "data" in data:
-            data_obj = data["data"]
+            data_obj = data["data"];
             if isinstance(data_obj, str):
-                image_url = data_obj
+                image_url = data_obj;
             elif isinstance(data_obj, dict):
-                image_url = (data_obj.get("url") or data_obj.get("image_url") or data_obj.get("image"))
+                image_url = (data_obj.get("url") or data_obj.get("image_url") or data_obj.get("image"));
             elif isinstance(data_obj, list) and data_obj:
-                first_item = data_obj[0]
+                first_item = data_obj[0];
                 if isinstance(first_item, str):
-                    image_url = first_item
+                    image_url = first_item;
                 elif isinstance(first_item, dict):
-                    image_url = first_item.get("url") or first_item.get("image_url")
+                    image_url = first_item.get("url") or first_item.get("image_url");
         if image_url:
-            image_urls = [image_url]
+            image_urls = [image_url];
 
-    print("Extracted image URLs:", image_urls)
+    print("Extracted image URLs:", image_urls);
 
     # Handle JXL format conversion for all images
     for idx, img_url in enumerate(image_urls):
         if img_url and img_url.startswith("data:image/jxl;base64"):
             try:
-                jxl_data = base64.b64decode(img_url.split(',', 1)[1])
+                jxl_data = base64.b64decode(img_url.split(',', 1)[1]);
                 with tempfile.NamedTemporaryFile(suffix='.jxl', delete=False) as jxl_file:
-                    jxl_file.write(jxl_data)
-                    jxl_path = jxl_file.name
-                png_path = tempfile.mktemp(suffix='.png')
-                subprocess.run(['djxl', jxl_path, png_path], check=True)
+                    jxl_file.write(jxl_data);
+                    jxl_path = jxl_file.name;
+                png_path = tempfile.mktemp(suffix='.png');
+                subprocess.run(['djxl', jxl_path, png_path], check=True);
                 with open(png_path, 'rb') as png_file:
-                    png_data = base64.b64encode(png_file.read()).decode()
-                    image_urls[idx] = f"data:image/png;base64,{png_data}"
-                os.remove(jxl_path)
-                os.remove(png_path)
+                    png_data = base64.b64encode(png_file.read()).decode();
+                    image_urls[idx] = f"data:image/png;base64,{png_data}";
+                os.remove(jxl_path);
+                os.remove(png_path);
             except Exception as e:
-                print(f"JXL conversion failed: {e}")
-                return jsonify({"error": "Failed to process image format"}), 500
+                print(f"JXL conversion failed: {e}");
+                return jsonify({"error": "Failed to process image format"}), 500;
 
     if not image_urls or not any(url.startswith("http") or url.startswith("data:image") for url in image_urls):
         return jsonify({
             "error": "Image URL not found",
             "api_response": data  # Debug data [REF]0
-        }), 500
+        }), 500;
 
     return jsonify({"image_urls": image_urls});
 
