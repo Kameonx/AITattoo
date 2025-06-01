@@ -381,11 +381,6 @@ HTML_TEMPLATE = """
                 return cb && cb.checked;
             });
 
-            if (checkedStyles.length === 0) {
-                showError('Please check at least one style option.');
-                return;
-            }
-
             let prompt = promptInput;
             // If prompt is empty, build it from checked checkboxes
             if (!prompt) {
@@ -795,7 +790,7 @@ def generate_image():
         response = requests.post(VENICE_API_URL, json=payload, headers=headers, timeout=60)
         print("Venice API status:", response.status_code)
         print("Venice API response:", response.text[:500])
-        response.raise_for_status()
+        response.raise_for_status();
         data = response.json()
         print("Response top-level keys:", list(data.keys()) if isinstance(data, dict) else "Not a dictionary")
     except Exception as e:
