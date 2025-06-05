@@ -1,0 +1,1241 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>🎨 AI Tattoo Generator</title>
+    <style>
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+        }
+        
+        html, body {
+            height: 100%;
+            font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+            background: #212121;
+            color: #ffffff;
+        }
+        
+        .app-container {
+            display: flex;
+            height: 100vh;
+        }
+        
+        .sidebar {
+            width: 300px;
+            background: #1a1a1a;
+            border-right: 1px solid #444;
+            transition: margin-left 0.3s ease;
+            position: relative;
+            z-index: 20;
+            flex-shrink: 0;
+        }
+        
+        .sidebar.collapsed {
+            margin-left: -280px;
+        }
+        
+        .sidebar-toggle {
+            position: absolute;
+            right: -20px;
+            top: 50%;
+            transform: translateY(-50%);
+            width: 20px;
+            height: 40px;
+            background: #1a1a1a;
+            border: 1px solid #444;
+            border-left: none;
+            border-radius: 0 8px 8px 0;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            cursor: pointer;
+            z-index: 21;
+        }
+        
+        .sidebar-toggle i {
+            color: #999;
+            font-size: 12px;
+            transition: transform 0.3s ease;
+        }
+        
+        .sidebar.collapsed .sidebar-toggle i {
+            transform: rotate(180deg);
+        }
+        
+        .sidebar-content {
+            padding: 20px;
+            height: 100vh;
+            display: flex;
+            flex-direction: column;
+            overflow-y: auto;
+        }
+        
+        .sidebar-header {
+            font-size: 18px;
+            font-weight: 600;
+            margin-bottom: 20px;
+            color: #ffffff;
+            text-align: center;
+        }
+        
+        .chat-container {
+            flex: 1;
+            height: 100vh;
+            display: flex;
+            flex-direction: column;
+            max-width: none;
+            margin: 0;
+            position: relative;
+        }
+        
+        .chat-header {
+            padding: 16px 20px;
+            border-bottom: 1px solid #444;
+            text-align: center;
+            background: #212121;
+            position: sticky;
+            top: 0;
+            z-index: 10;
+        }
+        
+        .chat-header h1 {
+            font-size: 20px;
+            font-weight: 600;
+            color: #ffffff;
+        }
+        
+        .chat-messages {
+            flex: 1;
+            overflow-y: auto;
+            padding: 20px;
+            padding-bottom: 120px;
+            max-width: 800px;
+            margin: 0 auto;
+            width: 100%;
+        }
+        
+        /* Custom scrollbar styling */
+        .chat-messages::-webkit-scrollbar {
+            width: 8px;
+        }
+        
+        .chat-messages::-webkit-scrollbar-track {
+            background: transparent;
+        }
+        
+        .chat-messages::-webkit-scrollbar-thumb {
+            background: #444;
+            border-radius: 4px;
+            opacity: 0;
+            transition: opacity 0.3s ease;
+        }
+        
+        .chat-messages:hover::-webkit-scrollbar-thumb {
+            opacity: 1;
+        }
+        
+        .chat-messages::-webkit-scrollbar-thumb:hover {
+            background: #666;
+        }
+        
+        /* Firefox scrollbar */
+        .chat-messages {
+            scrollbar-width: thin;
+            scrollbar-color: transparent transparent;
+            transition: scrollbar-color 0.3s ease;
+        }
+        
+        .chat-messages:hover {
+            scrollbar-color: #444 transparent;
+        }
+        
+        .message {
+            margin-bottom: 24px;
+            display: flex;
+            flex-direction: column;
+        }
+        
+        .message.user {
+            align-items: flex-end;
+        }
+        
+        .message.assistant {
+            align-items: flex-start;
+        }
+        
+        .message-content {
+            max-width: 70%;
+            padding: 12px 16px;
+            border-radius: 18px;
+            word-wrap: break-word;
+        }
+        
+        .message.user .message-content {
+            background: #2f2f2f;
+            color: #ffffff;
+        }
+        
+        .message.assistant .message-content {
+            background: #1a1a1a;
+            color: #ffffff;
+            border: 1px solid #444;
+        }
+        
+        .message-images {
+            display: grid;
+            grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
+            gap: 12px;
+            margin-top: 12px;
+            max-width: 70%;
+        }
+        
+        .message.assistant .message-images {
+            align-self: flex-start;
+        }
+        
+        .message-image {
+            border-radius: 12px;
+            max-width: 100%;
+            height: auto;
+            cursor: pointer;
+            transition: transform 0.2s;
+        }
+        
+        .message-image:hover {
+            transform: scale(1.02);
+        }
+        
+        .loading-indicators {
+            display: grid;
+            grid-template-columns: repeat(2, 1fr);
+            gap: 12px;
+            margin-top: 12px;
+            max-width: 70%;
+        }
+        
+        .loading-placeholder {
+            aspect-ratio: 1;
+            background: #1a1a1a;
+            border: 1px solid #444;
+            border-radius: 12px;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            min-height: 200px;
+        }
+        
+        .loading-spinner {
+            width: 40px;
+            height: 40px;
+            border: 3px solid #444;
+            border-top: 3px solid #10a37f;
+            border-radius: 50%;
+            animation: spin 1s linear infinite;
+        }
+        
+        @keyframes spin {
+            0% { transform: rotate(0deg); }
+            100% { transform: rotate(360deg); }
+        }
+        
+        .input-container {
+            position: fixed;
+            bottom: 0;
+            right: 0;
+            left: 300px;
+            padding: 20px;
+            background: linear-gradient(transparent, #212121 20%);
+            z-index: 10;
+            transition: left 0.3s ease;
+        }
+        
+        .sidebar.collapsed + .chat-container .input-container {
+            left: 20px;
+        }
+        
+        .input-wrapper {
+            display: flex;
+            align-items: flex-end;
+            gap: 12px;
+            background: #2f2f2f;
+            border-radius: 24px;
+            padding: 12px 16px;
+            border: 1px solid #444;
+            max-width: 800px;
+            margin: 0 auto;
+        }
+        
+        .input-wrapper:focus-within {
+            border-color: #666;
+        }
+        
+        .prompt-input {
+            flex: 1;
+            background: transparent;
+            border: none;
+            outline: none;
+            color: #ffffff;
+            font-size: 16px;
+            line-height: 24px;
+            resize: none;
+            max-height: 120px;
+            min-height: 24px;
+        }
+        
+        .prompt-input::placeholder {
+            color: #999;
+        }
+        
+        .send-button {
+            background: #ffffff;
+            color: #000000;
+            border: none;
+            border-radius: 12px;
+            width: 32px;
+            height: 32px;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            cursor: pointer;
+            transition: background 0.2s;
+            flex-shrink: 0;
+        }
+        
+        .send-button:hover:not(:disabled) {
+            background: #f0f0f0;
+        }
+        
+        .send-button:disabled {
+            background: #666;
+            cursor: not-allowed;
+        }
+        
+        .upload-button {
+            background: transparent;
+            border: none;
+            color: #999;
+            cursor: pointer;
+            padding: 4px;
+            border-radius: 8px;
+            transition: background 0.2s;
+            flex-shrink: 0;
+        }
+        
+        .upload-button:hover {
+            background: #444;
+            color: #ffffff;
+        }
+        
+        #file-input {
+            display: none;
+        }
+        
+        .welcome-message {
+            text-align: center;
+            color: #999;
+            margin-top: 40px;
+        }
+        
+        .model-selector {
+            margin-bottom: 20px;
+        }
+        
+        .model-button {
+            width: 100%;
+            background: #2f2f2f;
+            border: 1px solid #444;
+            color: #ffffff;
+            padding: 12px;
+            border-radius: 8px;
+            cursor: pointer;
+            font-size: 14px;
+            transition: all 0.2s;
+            display: flex;
+            align-items: center;
+            justify-content: space-between;
+        }
+        
+        .model-button:hover {
+            background: #3f3f3f;
+            border-color: #666;
+        }
+        
+        .model-modal {
+            position: fixed;
+            top: 0;
+            left: 0;
+            width: 100%;
+            height: 100%;
+            background: rgba(0,0,0,0.8);
+            display: none;
+            align-items: center;
+            justify-content: center;
+            z-index: 1000;
+        }
+        
+        .model-modal-content {
+            background: #1a1a1a;
+            border: 1px solid #444;
+            border-radius: 12px;
+            padding: 24px;
+            max-width: 500px;
+            width: 90%;
+            max-height: 80vh;
+            overflow-y: auto;
+        }
+        
+        .model-modal-header {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            margin-bottom: 20px;
+        }
+        
+        .model-modal-title {
+            font-size: 18px;
+            font-weight: 600;
+            color: #ffffff;
+        }
+        
+        .close-modal {
+            background: none;
+            border: none;
+            color: #999;
+            font-size: 24px;
+            cursor: pointer;
+            padding: 0;
+            width: 30px;
+            height: 30px;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+        }
+        
+        .close-modal:hover {
+            color: #ffffff;
+        }
+        
+        .model-option {
+            background: #2f2f2f;
+            border: 1px solid #444;
+            border-radius: 8px;
+            padding: 16px;
+            margin-bottom: 12px;
+            cursor: pointer;
+            transition: all 0.2s;
+        }
+        
+        .model-option:hover {
+            background: #3f3f3f;
+            border-color: #666;
+        }
+        
+        .model-option.selected {
+            background: #10a37f;
+            border-color: #10a37f;
+        }
+        
+        .model-option-name {
+            font-weight: 600;
+            color: #ffffff;
+            margin-bottom: 4px;
+        }
+        
+        .model-option-description {
+            color: #ccc;
+            font-size: 13px;
+        }
+        
+        .sidebar-note {
+            margin-bottom: 20px;
+            padding: 16px;
+            background: #2f2f2f;
+            border-radius: 8px;
+            font-size: 13px;
+            line-height: 1.4;
+            color: #ccc;
+            flex-shrink: 0;
+        }
+
+        .optimization-info {
+            margin-bottom: 15px;
+            padding: 12px;
+            background: #1a4d3a;
+            border-radius: 8px;
+            font-size: 12px;
+            line-height: 1.3;
+            color: #a8f0c4;
+            border: 1px solid #10a37f;
+        }
+
+        .optimization-info h4 {
+            color: #10a37f;
+            margin-bottom: 8px;
+            font-size: 13px;
+        }
+
+        .optimization-info ul {
+            margin: 0;
+            padding-left: 15px;
+        }
+
+        .optimization-info li {
+            margin-bottom: 3px;
+        }
+
+        .sidebar-footer {
+            margin-top: auto;
+            padding-top: 20px;
+            border-top: 1px solid #444;
+            text-align: center;
+            font-size: 13px;
+            color: #ccc;
+            flex-shrink: 0;
+        }
+        
+        .retry-button {
+            background: none;
+            border: none;
+            color: #999;
+            cursor: pointer;
+            padding: 4px 8px;
+            border-radius: 4px;
+            margin-left: 8px;
+            font-size: 16px;
+            transition: all 0.2s;
+        }
+        
+        .retry-button:hover {
+            background: #444;
+            color: #ffffff;
+        }
+        
+        @media (max-width: 768px) {
+            .app-container {
+                flex-direction: column;
+            }
+            
+            .sidebar {
+                position: fixed;
+                left: 0;
+                top: 0;
+                height: 100vh;
+                width: 280px;
+                z-index: 30;
+                transform: translateX(-100%);
+                transition: transform 0.3s ease;
+                margin-left: 0;
+            }
+            
+            .sidebar.open {
+                transform: translateX(0);
+            }
+            
+            .sidebar.collapsed {
+                margin-left: 0;
+                transform: translateX(-100%);
+            }
+            
+            .sidebar-toggle {
+                right: -40px;
+                width: 40px;
+                height: 50px;
+                border-radius: 0 12px 12px 0;
+                background: #1a1a1a;
+                border: 2px solid #444;
+                border-left: none;
+            }
+            
+            .sidebar-toggle i {
+                font-size: 14px;
+            }
+            
+            .sidebar.open .sidebar-toggle i {
+                transform: rotate(180deg);
+            }
+            
+            .chat-container {
+                width: 100%;
+                margin-left: 0;
+            }
+            
+            .input-container {
+                left: 0;
+                right: 0;
+            }
+            
+            .sidebar-content {
+                padding: 15px;
+            }
+            
+            .sidebar-header {
+                font-size: 16px;
+                margin-bottom: 15px;
+            }
+            
+            .model-button {
+                padding: 10px;
+                font-size: 13px;
+            }
+            
+            .sidebar-note {
+                font-size: 12px;
+                padding: 12px;
+                margin-bottom: 15px;
+            }
+            
+            .sidebar-footer {
+                font-size: 12px;
+                padding-top: 15px;
+            }
+        }
+        
+        @media (max-width: 480px) {
+            .sidebar {
+                width: 260px;
+            }
+            
+            .sidebar-content {
+                padding: 12px;
+            }
+            
+            .sidebar-header {
+                font-size: 15px;
+                margin-bottom: 12px;
+            }
+            
+            .model-button {
+                padding: 8px;
+                font-size: 12px;
+            }
+            
+            .sidebar-note {
+                font-size: 11px;
+                padding: 10px;
+                margin-bottom: 12px;
+            }
+            
+            .sidebar-footer {
+                font-size: 11px;
+                padding-top: 12px;
+            }
+        }
+        
+        /* Overlay for mobile when sidebar is open */
+        .sidebar-overlay {
+            display: none;
+            position: fixed;
+            top: 0;
+            left: 0;
+            width: 100%;
+            height: 100%;
+            background: rgba(0, 0, 0, 0.5);
+            z-index: 25;
+        }
+        
+        @media (max-width: 768px) {
+            .sidebar-overlay.active {
+                display: block;
+            }
+        }
+    </style>
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
+</head>
+<body>
+    <div class="app-container">
+        <div class="sidebar-overlay" id="sidebar-overlay" onclick="closeSidebar()"></div>
+        <div class="sidebar" id="sidebar">
+            <div class="sidebar-toggle" onclick="toggleSidebar()">
+                <i class="fas fa-chevron-left"></i>
+            </div>
+            <div class="sidebar-content">
+                <div class="sidebar-header">
+                    🎨 AI Tattoo Generator
+                </div>
+                
+                <div class="model-selector">
+                    <button class="model-button" onclick="openModelModal()">
+                        <span id="selected-model-name">HiDream (Default)</span>
+                        <i class="fas fa-cog"></i>
+                    </button>
+                </div>
+                
+                <div style="flex: 1;"></div>
+                
+                <div class="optimization-info">
+                    <h4>🚀 Optimizations Active</h4>
+                    <ul>
+                        <li>Watermark hidden on all models</li>
+                        <li>WebP format for smaller file sizes</li>
+                        <li>Safe mode disabled for uncensored results</li>
+                        <li>High quality 1024x1024 resolution</li>
+                    </ul>
+                </div>
+                
+                <div class="sidebar-note">
+                    Note: Private and uncensored. Chats may get reset each time there are updates to the app. This app does not require payment and has no ads. A donation would mean a lot!
+                    <div style="margin-top: 12px;">
+                        <a href="https://donate.stripe.com/3cs8zU2CPecAfw4eUU" target="_blank" style="color: #10a37f; text-decoration: none; font-weight: 600;">Donate</a>
+                    </div>
+                    <div style="margin-top: 18px; text-align: left; color: #aaa;">-Kameon</div>
+                </div>
+                
+                <div class="sidebar-footer">
+                    <div style="font-weight: 600; margin-bottom: 4px;">Kameon</div>
+                    <div>Powered by Venice</div>
+                </div>
+            </div>
+        </div>
+        
+        <div class="chat-container">
+            <div class="chat-header">
+                <h1>🎨 AI Tattoo Generator ✨</h1>
+            </div>
+            
+            <div class="chat-messages" id="chat-messages">
+                <div class="welcome-message">
+                    <p>🎉 Welcome! Describe the tattoo design you'd like to generate, or upload an image to enhance. 🖼️✨</p>
+                </div>
+            </div>
+            
+            <div class="input-container">
+                <div class="input-wrapper">
+                    <label for="file-input" class="upload-button">
+                        <i class="fas fa-paperclip"></i>
+                    </label>
+                    <input type="file" id="file-input" accept="image/*">
+                    <textarea 
+                        id="prompt-input" 
+                        class="prompt-input" 
+                        placeholder="✨ Describe your tattoo design..." 
+                        rows="1"
+                    ></textarea>
+                    <button id="send-button" class="send-button" onclick="sendMessage()">
+                        <i class="fas fa-arrow-up"></i>
+                    </button>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- Model Selection Modal -->
+    <div class="model-modal" id="model-modal">
+        <div class="model-modal-content">
+            <div class="model-modal-header">
+                <div class="model-modal-title">Select AI Model</div>
+                <button class="close-modal" onclick="closeModelModal()">×</button>
+            </div>
+            <div id="model-options">
+                <!-- Model options will be populated by JavaScript -->
+            </div>
+        </div>
+    </div>
+
+    <script>
+        // Inject models from Flask server-side
+        window.modelsFromServer = JSON.parse('{{ models|tojson|safe }}');
+    </script>
+    <script>
+        let uploadedImage = null;
+        let isGenerating = false;
+        let currentModel = 'hidream';
+        let lastUserPrompt = '';
+        let lastUploadedImage = null;
+
+        // Model data passed from Flask
+        const availableModels = window.modelsFromServer || [];
+
+        // Load saved data from localStorage on page load
+        function loadSavedData() {
+            // Load saved model
+            const savedModel = localStorage.getItem('selectedModel');
+            const savedModelName = localStorage.getItem('selectedModelName');
+            if (savedModel && savedModelName) {
+                currentModel = savedModel;
+                document.getElementById('selected-model-name').textContent = savedModelName;
+            }
+
+            // Load saved chat history
+            const savedMessages = localStorage.getItem('chatHistory');
+            if (savedMessages) {
+                try {
+                    const messages = JSON.parse(savedMessages);
+                    const messagesContainer = document.getElementById('chat-messages');
+                    
+                    // Clear welcome message
+                    messagesContainer.innerHTML = '';
+                    
+                    // Restore messages
+                    messages.forEach(msg => {
+                        addMessage(msg.sender, msg.text, msg.images || [], false); // false = don't save to localStorage again
+                    });
+                } catch (e) {
+                    console.error('Error loading chat history:', e);
+                    localStorage.removeItem('chatHistory'); // Clear corrupted data
+                }
+            }
+        }
+
+        // Save chat history to localStorage
+        function saveChatHistory() {
+            try {
+                const messagesContainer = document.getElementById('chat-messages');
+                const messageElements = messagesContainer.querySelectorAll('.message');
+                const messages = [];
+
+                messageElements.forEach(msgEl => {
+                    const isUser = msgEl.classList.contains('user');
+                    const isAssistant = msgEl.classList.contains('assistant');
+                    
+                    if (isUser || isAssistant) {
+                        const textEl = msgEl.querySelector('.message-content');
+                        const imageEls = msgEl.querySelectorAll('.message-image');
+                        
+                        const images = Array.from(imageEls).map(img => img.src);
+                        
+                        messages.push({
+                            sender: isUser ? 'user' : 'assistant',
+                            text: textEl ? textEl.textContent : '',
+                            images: images
+                        });
+                    }
+                });
+
+                localStorage.setItem('chatHistory', JSON.stringify(messages));
+            } catch (e) {
+                console.error('Error saving chat history:', e);
+            }
+        }
+
+        // Clear chat history
+        function clearChatHistory() {
+            localStorage.removeItem('chatHistory');
+            const messagesContainer = document.getElementById('chat-messages');
+            messagesContainer.innerHTML = `
+                <div class="welcome-message">
+                    <p>🎉 Welcome! Describe the tattoo design you'd like to generate, or upload an image to enhance. 🖼️✨</p>
+                </div>
+            `;
+        }
+
+        function openModelModal() {
+            const modal = document.getElementById('model-modal');
+            const optionsContainer = document.getElementById('model-options');
+            
+            // Debug: Check if models are loaded
+            console.log('Available models:', availableModels);
+            
+            // Populate model options
+            optionsContainer.innerHTML = '';
+            
+            if (availableModels && availableModels.length > 0) {
+                availableModels.forEach(model => {
+                    const option = document.createElement('div');
+                    option.className = `model-option ${model.id === currentModel ? 'selected' : ''}`;
+                    option.onclick = () => selectModel(model.id, model.name);
+                    option.innerHTML = `
+                        <div class="model-option-name">${model.name}</div>
+                        <div class="model-option-description">${model.description}</div>
+                    `;
+                    optionsContainer.appendChild(option);
+                });
+            } else {
+                optionsContainer.innerHTML = '<div style="color: #999; text-align: center; padding: 20px;">No models available</div>';
+            }
+            
+            modal.style.display = 'flex';
+        }
+
+        function closeModelModal() {
+            document.getElementById('model-modal').style.display = 'none';
+        }
+
+        function selectModel(modelId, modelName) {
+            currentModel = modelId;
+            document.getElementById('selected-model-name').textContent = modelName;
+            
+            // Save to localStorage
+            localStorage.setItem('selectedModel', modelId);
+            localStorage.setItem('selectedModelName', modelName);
+            
+            closeModelModal();
+        }
+        
+        // Close modal when clicking outside
+        document.getElementById('model-modal').addEventListener('click', function(e) {
+            if (e.target === this) {
+                closeModelModal();
+            }
+        });
+
+        // Auto-resize textarea
+        const promptInput = document.getElementById('prompt-input');
+        promptInput.addEventListener('input', function() {
+            this.style.height = 'auto';
+            this.style.height = Math.min(this.scrollHeight, 120) + 'px';
+        });
+
+        // Handle Enter key
+        promptInput.addEventListener('keydown', function(e) {
+            if (e.key === 'Enter' && !e.shiftKey) {
+                e.preventDefault();
+                sendMessage();
+            }
+        });
+
+        // Handle file upload
+        document.getElementById('file-input').addEventListener('change', function(event) {
+            const file = event.target.files[0];
+            if (!file) return;
+
+            const reader = new FileReader();
+            reader.onload = function(e) {
+                uploadedImage = e.target.result;
+                const uploadButton = document.querySelector('.upload-button');
+                uploadButton.style.color = '#10a37f';
+                promptInput.focus();
+            };
+            reader.readAsDataURL(file);
+        });
+
+        function sendMessage(retryPrompt = null, retryImage = null) {
+            const prompt = retryPrompt || promptInput.value.trim();
+            const imageToUse = retryImage || uploadedImage;
+            
+            if (!prompt && !imageToUse) return;
+            if (isGenerating) return;
+
+            // Store for retry functionality
+            if (!retryPrompt) {
+                lastUserPrompt = prompt;
+                lastUploadedImage = imageToUse;
+            }
+
+            // Add user message
+            addMessage('user', prompt || '🖼️ Image uploaded', []);
+            
+            // Clear input if not retry
+            if (!retryPrompt) {
+                promptInput.value = '';
+                promptInput.style.height = 'auto';
+            }
+            
+            // Add loading message with 4 spinners
+            const loadingId = addLoadingMessage();
+            
+            // Disable send button
+            isGenerating = true;
+            document.getElementById('send-button').disabled = true;
+
+            // Generate 4 images with different seeds for variety
+            const promises = [];
+            for (let i = 0; i < 4; i++) {
+                const seed = Math.floor(Math.random() * 2_000_000_000) - 1_000_000_000;
+                promises.push(
+                    fetch('/generate', {
+                        method: 'POST',
+                        headers: { 'Content-Type': 'application/json' },
+                        body: JSON.stringify({ 
+                            prompt: prompt || '',
+                            seed,
+                            image: imageToUse,
+                            variation_index: i,
+                            model: currentModel
+                        })
+                    }).then(res => {
+                        if (!res.ok) {
+                            return res.json().then(err => Promise.reject(err));
+                        }
+                        return res.json();
+                    })
+                );
+            }
+
+            Promise.all(promises)
+                .then(results => {
+                    removeLoadingMessage(loadingId);
+                    
+                    const imageUrls = [];
+                    results.forEach(data => {
+                        if (data.image_urls && Array.isArray(data.image_urls)) {
+                            imageUrls.push(...data.image_urls);
+                        } else if (data.image_url) {
+                            imageUrls.push(data.image_url);
+                        }
+                    });
+
+                    if (imageUrls.length > 0) {
+                        addMessage('assistant', '🎨 Here are your generated tattoo designs (watermark-free):', imageUrls);
+                    } else {
+                        addMessage('assistant', '😔 Sorry, I encountered an error generating your tattoo designs. Please try again.');
+                    }
+                })
+                .catch(error => {
+                    removeLoadingMessage(loadingId);
+                    console.error('Generation error:', error);
+                    
+                    let errorMessage = '😔 Sorry, I encountered an error. Please try again.';
+                    if (error.error && typeof error.error === 'string') {
+                        errorMessage = `😔 ${error.error}`;
+                    }
+                    
+                    addMessage('assistant', errorMessage);
+                })
+                .finally(() => {
+                    isGenerating = false;
+                    document.getElementById('send-button').disabled = false;
+                    if (!retryPrompt) {
+                        uploadedImage = null;
+                        document.querySelector('.upload-button').style.color = '#999';
+                    }
+                });
+        }
+
+        function retryGeneration() {
+            if (lastUserPrompt || lastUploadedImage) {
+                // Add loading message with 4 spinners
+                const loadingId = addLoadingMessage();
+                
+                // Disable send button
+                isGenerating = true;
+                document.getElementById('send-button').disabled = true;
+
+                // Generate 4 images using the same prompt/image as last time
+                const promises = [];
+                for (let i = 0; i < 4; i++) {
+                    const seed = Math.floor(Math.random() * 2_000_000_000) - 1_000_000_000;
+                    promises.push(
+                        fetch('/generate', {
+                            method: 'POST',
+                            headers: { 'Content-Type': 'application/json' },
+                            body: JSON.stringify({ 
+                                prompt: lastUserPrompt || '',
+                                seed,
+                                image: lastUploadedImage,
+                                variation_index: i,
+                                model: currentModel
+                            })
+                        }).then(res => res.json())
+                    );
+                }
+
+                Promise.all(promises)
+                    .then(results => {
+                        removeLoadingMessage(loadingId);
+                        
+                        const imageUrls = [];
+                        results.forEach(data => {
+                            if (data.image_urls && Array.isArray(data.image_urls)) {
+                                imageUrls.push(...data.image_urls);
+                            } else if (data.image_url) {
+                                imageUrls.push(data.image_url);
+                            }
+                        });
+
+                        if (imageUrls.length > 0) {
+                            addMessage('assistant', '🎨 Here are your generated tattoo designs (watermark-free):', imageUrls);
+                        } else {
+                            addMessage('assistant', '😔 Sorry, I encountered an error generating your tattoo designs. Please try again.');
+                        }
+                    })
+                    .catch(error => {
+                        removeLoadingMessage(loadingId);
+                        addMessage('assistant', '😔 Sorry, I encountered an error. Please try again.');
+                        console.error('Error:', error);
+                    })
+                    .finally(() => {
+                        isGenerating = false;
+                        document.getElementById('send-button').disabled = false;
+                    });
+            }
+        }
+
+        function addMessage(sender, text, images = [], saveToStorage = true) {
+            const messagesContainer = document.getElementById('chat-messages');
+            const messageDiv = document.createElement('div');
+            messageDiv.className = `message ${sender}`;
+
+            let content = '';
+            
+            content += `<div class="message-content">${text}</div>`;
+            
+            if (images && images.length > 0) {
+                const imagesHtml = images.map(url => 
+                    `<img src="${url}" alt="Generated tattoo" class="message-image" onclick="openImageModal('${url}')">`
+                ).join('');
+                content += `<div class="message-images">${imagesHtml}</div>`;
+                
+                // Add retry button below generated images for assistant messages
+                if (sender === 'assistant') {
+                    content += `
+                        <div class="message-actions" style="margin-top: 8px; text-align: left;">
+                            <button class="retry-button" onclick="retryGeneration()" title="Retry this prompt">
+                                🔄
+                            </button>
+                        </div>
+                    `;
+                }
+            }
+
+            messageDiv.innerHTML = content;
+            messagesContainer.appendChild(messageDiv);
+            messagesContainer.scrollTop = messagesContainer.scrollHeight;
+
+            // Save to localStorage if requested
+            if (saveToStorage) {
+                saveChatHistory();
+            }
+        }
+
+        function addLoadingMessage() {
+            const messagesContainer = document.getElementById('chat-messages');
+            const messageDiv = document.createElement('div');
+            messageDiv.className = 'message assistant';
+            messageDiv.innerHTML = `
+                <div class="message-content">🎨 Generating your tattoo designs...</div>
+                <div class="loading-indicators">
+                    <div class="loading-placeholder">
+                        <div class="loading-spinner"></div>
+                    </div>
+                    <div class="loading-placeholder">
+                        <div class="loading-spinner"></div>
+                    </div>
+                    <div class="loading-placeholder">
+                        <div class="loading-spinner"></div>
+                    </div>
+                    <div class="loading-placeholder">
+                        <div class="loading-spinner"></div>
+                    </div>
+                </div>
+            `;
+            
+            const loadingId = Date.now();
+            messageDiv.id = `loading-${loadingId}`;
+            messagesContainer.appendChild(messageDiv);
+            messagesContainer.scrollTop = messagesContainer.scrollHeight;
+            
+            return loadingId;
+        }
+
+        function removeLoadingMessage(loadingId) {
+            const loadingMessage = document.getElementById(`loading-${loadingId}`);
+            if (loadingMessage) {
+                loadingMessage.remove();
+            }
+        }
+
+        function openImageModal(imageUrl) {
+            const modal = document.createElement('div');
+            modal.style.cssText = `
+                position: fixed;
+                top: 0;
+                left: 0;
+                width: 100%;
+                height: 100%;
+                background: rgba(0,0,0,0.9);
+                display: flex;
+                align-items: center;
+                justify-content: center;
+                z-index: 1000;
+                cursor: pointer;
+            `;
+            
+            const img = document.createElement('img');
+            img.src = imageUrl;
+            img.style.cssText = `
+                max-width: 90%;
+                max-height: 90%;
+                border-radius: 8px;
+            `;
+            
+            modal.appendChild(img);
+            modal.onclick = () => modal.remove();
+            document.body.appendChild(modal);
+        }
+
+        function toggleSidebar() {
+            const sidebar = document.getElementById('sidebar');
+            const overlay = document.getElementById('sidebar-overlay');
+            
+            if (window.innerWidth <= 768) {
+                // Mobile behavior
+                sidebar.classList.toggle('open');
+                overlay.classList.toggle('active');
+            } else {
+                // Desktop behavior
+                sidebar.classList.toggle('collapsed');
+                saveSidebarState();
+            }
+        }
+
+        function closeSidebar() {
+            const sidebar = document.getElementById('sidebar');
+            const overlay = document.getElementById('sidebar-overlay');
+            
+            if (window.innerWidth <= 768) {
+                sidebar.classList.remove('open');
+                overlay.classList.remove('active');
+            }
+        }
+
+        // Handle window resize
+        window.addEventListener('resize', function() {
+            const sidebar = document.getElementById('sidebar');
+            const overlay = document.getElementById('sidebar-overlay');
+            
+            if (window.innerWidth > 768) {
+                // Desktop - remove mobile classes
+                sidebar.classList.remove('open');
+                overlay.classList.remove('active');
+            } else {
+                // Mobile - remove desktop collapse
+                sidebar.classList.remove('collapsed');
+            }
+        });
+
+        // Save sidebar state
+        function saveSidebarState() {
+            const sidebar = document.getElementById('sidebar');
+            if (window.innerWidth > 768) {
+                localStorage.setItem('sidebarCollapsed', sidebar.classList.contains('collapsed'));
+            }
+        }
+
+        // Load sidebar state
+        function loadSidebarState() {
+            if (window.innerWidth > 768) {
+                const isCollapsed = localStorage.getItem('sidebarCollapsed') === 'true';
+                const sidebar = document.getElementById('sidebar');
+                if (isCollapsed) {
+                    sidebar.classList.add('collapsed');
+                }
+            }
+        }
+
+        // Add clear chat button functionality
+        function addClearChatButton() {
+            const sidebarContent = document.querySelector('.sidebar-content');
+            const clearButton = document.createElement('button');
+            clearButton.innerHTML = '🗑️ Clear Chat';
+            clearButton.className = 'model-button';
+            clearButton.style.marginBottom = '10px';
+            clearButton.style.backgroundColor = '#444';
+            clearButton.onclick = clearChatHistory;
+            
+            // Insert before the model selector
+            const modelSelector = document.querySelector('.model-selector');
+            sidebarContent.insertBefore(clearButton, modelSelector);
+        }
+
+        // Initialize everything when page loads
+        document.addEventListener('DOMContentLoaded', function() {
+            loadSavedData();
+            addClearChatButton();
+            loadSidebarState();
+        });
+    </script>
+</body>
+</html>
